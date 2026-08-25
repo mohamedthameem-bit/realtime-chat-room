@@ -1,0 +1,282 @@
+/**
+ * sidebar.js — Persistent navigation sidebar component.
+ *
+ * Injected into every authenticated page via a single <script> tag.
+ * Depends on api.js (the global `API` object) being loaded before this script.
+ *
+ * What this file does:
+ *  1. Fetches the current user (API.whoami).
+ *  2. Injects the sidebar + mobile topbar HTML into the page.
+ *  3. Marks the active nav item from the current URL path.
+ *  4. Wires up: mobile hamburger toggle, nav-link clicks (with chat leave),
+ *     and the logout button (with confirmation modal).
+ */
+
+(function () {
+  'use strict';
+
+  // ── Shared icon set (Feather-style, consistent stroke-width=2) ──────────────
+  const I = (d, extra = '') =>
+    `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${d}</svg>`;
+
+  const ICONS = {
+    home:    I('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>'),
+    create:  I('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'),
+    join:    I('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>'),
+    rooms:   I('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+    profile: I('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+    logout:  I('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
+    menu:    I('<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>'),
+    close:   I('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+  };
+
+  const LOGO_SVG = `<svg class="snav-logo-svg" width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+    <rect width="40" height="40" rx="10" fill="url(#snavGrad)"/>
+    <path d="M10 13a3 3 0 013-3h14a3 3 0 013 3v10a3 3 0 01-3 3h-4l-5 5v-5h-5a3 3 0 01-3-3V13z" fill="white" fill-opacity="0.9"/>
+    <defs><linearGradient id="snavGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6C63FF"/><stop offset="1" stop-color="#3ECFCF"/>
+    </linearGradient></defs>
+  </svg>`;
+
+  // ── Nav item definitions ────────────────────────────────────────────────────
+  const NAV_ITEMS = [
+    { id: 'home',    label: 'Home',      href: '/home.html',        icon: ICONS.home    },
+    { id: 'create',  label: 'Create',    href: '/create-room.html', icon: ICONS.create  },
+    { id: 'join',    label: 'Join',      href: '/rooms.html',       icon: ICONS.join    },
+    { id: 'rooms',   label: 'All Rooms', href: '/rooms.html',       icon: ICONS.rooms   },
+    { id: 'profile', label: 'Profile',   href: '/profile.html',     icon: ICONS.profile },
+  ];
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  function escapeHTML(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function avatarColor(name) {
+    const palette = ['#6C63FF', '#3ECFCF', '#f472b6', '#fb923c', '#a3e635', '#facc15'];
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return palette[Math.abs(h) % palette.length];
+  }
+
+  // ── Determine which nav item is active ──────────────────────────────────────
+  function getActiveId() {
+    const p = window.location.pathname;
+    if (p === '/' || p === '/home.html')        return 'home';
+    if (p === '/create-room.html')              return 'create';
+    if (p === '/profile.html')                  return 'profile';
+    if (p === '/rooms.html')                    return 'rooms';
+    // /chat.html — no active highlight (user is inside a room)
+    return null;
+  }
+
+  // ── Build sidebar + topbar HTML ─────────────────────────────────────────────
+  function buildHTML(user) {
+    const activeId = getActiveId();
+    const color    = avatarColor(user.username);
+    const initials = escapeHTML(user.username.slice(0, 2).toUpperCase());
+
+    const avatarHTML = user.profilePic
+      ? `<img src="${escapeHTML(user.profilePic)}" alt="" class="snav-avatar-img" />`
+      : `<div class="snav-avatar-letter" style="background:${color};" aria-hidden="true">${initials}</div>`;
+
+    const navHTML = NAV_ITEMS.map(({ id, label, href, icon }) => {
+      const isActive = activeId === id;
+      return `<li class="snav-item">
+        <a href="${href}"
+           class="snav-link${isActive ? ' snav-link--active' : ''}"
+           data-nav-id="${id}"
+           ${isActive ? 'aria-current="page"' : ''}>
+          <span class="snav-icon">${icon}</span>
+          <span class="snav-label">${label}</span>
+        </a>
+      </li>`;
+    }).join('');
+
+    return `
+      <!-- ── Mobile topbar ─────────────────────────────────── -->
+      <div id="app-topbar" class="app-topbar" role="banner">
+        <button id="app-hamburger" class="app-hamburger"
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="app-sidebar">
+          <span class="ham-icon">${ICONS.menu}</span>
+          <span class="ham-close">${ICONS.close}</span>
+        </button>
+        <div class="app-topbar-brand">
+          ${LOGO_SVG}
+          <span class="app-topbar-title">ChatRoom</span>
+        </div>
+      </div>
+
+      <!-- ── Overlay (mobile) ───────────────────────────────── -->
+      <div id="app-sidebar-overlay" class="app-sidebar-overlay" aria-hidden="true"></div>
+
+      <!-- ── Sidebar ───────────────────────────────────────── -->
+      <nav id="app-sidebar" class="app-sidebar" aria-label="Main navigation">
+
+        <!-- Brand (desktop only) -->
+        <div class="snav-brand">
+          ${LOGO_SVG}
+          <span class="snav-brand-name">ChatRoom</span>
+        </div>
+
+        <!-- Signed-in user -->
+        <div class="snav-user">
+          <div class="snav-user-avatar">${avatarHTML}</div>
+          <div class="snav-user-info">
+            <span class="snav-user-name" title="${escapeHTML(user.username)}">${escapeHTML(user.username)}</span>
+            <span class="snav-user-online">
+              <span class="snav-online-dot" aria-hidden="true"></span>
+              Online
+            </span>
+          </div>
+        </div>
+
+        <!-- Nav links -->
+        <ul class="snav-list" role="list">${navHTML}</ul>
+
+        <!-- Logout -->
+        <div class="snav-footer">
+          <button id="snav-logout" class="snav-link snav-logout-btn" type="button"
+                  aria-label="Sign out of ChatRoom">
+            <span class="snav-icon">${ICONS.logout}</span>
+            <span class="snav-label">Logout</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- ── Logout confirmation modal ─────────────────────── -->
+      <div id="snav-modal" class="snav-modal-backdrop" role="dialog"
+           aria-modal="true" aria-labelledby="snav-modal-title" hidden>
+        <div class="snav-modal-card">
+          <h2 class="snav-modal-title" id="snav-modal-title">Sign out?</h2>
+          <p class="snav-modal-body">You'll need to sign in again to access your rooms.</p>
+          <div class="snav-modal-actions">
+            <button id="snav-modal-cancel" class="btn-ghost">Cancel</button>
+            <button id="snav-modal-confirm" class="btn-leave">Sign Out</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Inject into page ─────────────────────────────────────────────────────────
+  function inject(user) {
+    const root = document.createElement('div');
+    root.id    = 'app-nav-root';
+    root.innerHTML = buildHTML(user);
+    document.body.prepend(root);
+    document.body.classList.add('has-sidebar');
+  }
+
+  // ── Mobile sidebar toggle ────────────────────────────────────────────────────
+  function initMobileToggle() {
+    const hamburger = document.getElementById('app-hamburger');
+    const overlay   = document.getElementById('app-sidebar-overlay');
+
+    function open() {
+      document.body.classList.add('nav-sidebar-open');
+      hamburger.setAttribute('aria-expanded', 'true');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
+    function close() {
+      document.body.classList.remove('nav-sidebar-open');
+      hamburger.setAttribute('aria-expanded', 'false');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    hamburger.addEventListener('click', () =>
+      document.body.classList.contains('nav-sidebar-open') ? close() : open()
+    );
+    overlay.addEventListener('click', close);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('nav-sidebar-open')) close();
+    });
+
+    // Close on any nav link click (tapping a link on mobile should close the sidebar first)
+    document.querySelectorAll('#app-sidebar .snav-link[href]').forEach(link =>
+      link.addEventListener('click', close)
+    );
+  }
+
+  // ── Chat page: clean room leave before navigating away ───────────────────────
+  // chat.js sets window.__chatLeave = async function() { ... }
+  // so we can call it here without any direct coupling.
+  async function maybeLeaveChat() {
+    if (typeof window.__chatLeave === 'function') {
+      try { await window.__chatLeave(); } catch (_) {}
+    }
+  }
+
+  // ── Nav link clicks (intercept on chat page to leave cleanly) ───────────────
+  function initNavigation() {
+    document.querySelectorAll('#app-sidebar .snav-link[data-nav-id]').forEach(link => {
+      link.addEventListener('click', async (e) => {
+        const href = link.getAttribute('href');
+        if (!href) return;
+
+        // Only intercept if on the chat page — otherwise default browser navigation
+        if (window.location.pathname.includes('chat.html')) {
+          e.preventDefault();
+          await maybeLeaveChat();
+          window.location.href = href;
+        }
+        // Non-chat pages: let the default <a> navigation happen
+      });
+    });
+  }
+
+  // ── Logout modal ─────────────────────────────────────────────────────────────
+  function initLogout() {
+    const logoutBtn    = document.getElementById('snav-logout');
+    const modal        = document.getElementById('snav-modal');
+    const cancelBtn    = document.getElementById('snav-modal-cancel');
+    const confirmBtn   = document.getElementById('snav-modal-confirm');
+
+    function openModal()  { modal.hidden = false; cancelBtn.focus(); }
+    function closeModal() { modal.hidden = true; }
+
+    logoutBtn.addEventListener('click', openModal);
+    cancelBtn.addEventListener('click', closeModal);
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.hidden) closeModal();
+    });
+
+    confirmBtn.addEventListener('click', async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Signing out…';
+
+      // Leave any active chat room first
+      await maybeLeaveChat();
+
+      // Clear the JWT cookie via API
+      try { await API.post('/api/auth/signout', {}); } catch (_) {}
+
+      window.location.href = '/auth.html';
+    });
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  async function init() {
+    if (typeof API === 'undefined') {
+      console.error('[Sidebar] api.js must be loaded before sidebar.js');
+      return;
+    }
+
+    const user = await API.whoami();
+    if (!user) return; // Unauthenticated — don't render (auth page will handle)
+
+    inject(user);
+    initMobileToggle();
+    initNavigation();
+    initLogout();
+  }
+
+  init();
+})();

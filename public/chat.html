@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatRoom</title>
+    <meta name="description" content="Real-time chat room powered by Socket.IO." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body class="chat-page">
+
+    <!-- Connection status banner -->
+    <div id="connection-banner" class="connection-banner" role="status" aria-live="polite" hidden>
+      <span class="banner-dot" aria-hidden="true"></span>
+      <span id="connection-banner-text">Reconnecting…</span>
+    </div>
+
+    <div class="chat-layout">
+
+      <!-- ═══ SIDEBAR ═══ -->
+      <aside id="sidebar" class="sidebar" aria-label="Online users">
+        <div class="sidebar-header">
+          <div class="sidebar-title-group">
+            <h2 class="sidebar-title">Online</h2>
+            <span id="user-count-badge" class="user-count-badge" aria-label="Online user count">0</span>
+          </div>
+          <button id="sidebar-close-btn" class="icon-btn sidebar-close-btn" aria-label="Close sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <ul id="user-list" class="user-list" aria-label="List of online users"></ul>
+
+        <div class="sidebar-footer">
+          <div class="room-info">
+            <span class="room-info-label">Room</span>
+            <span id="room-name-display" class="room-name-display">#…</span>
+          </div>
+          <button id="leave-btn" class="btn-leave" aria-label="Leave room">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Leave Room
+          </button>
+        </div>
+      </aside>
+
+      <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+
+      <!-- ═══ MAIN CHAT ═══ -->
+      <div class="chat-main">
+        <header class="chat-header">
+          <button id="sidebar-toggle-btn" class="icon-btn sidebar-toggle-btn" aria-label="Toggle online users" aria-expanded="false" aria-controls="sidebar">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+
+          <div class="chat-header-title">
+            <div class="logo-small" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
+                <rect width="40" height="40" rx="10" fill="url(#lgSmall)"/>
+                <path d="M10 13a3 3 0 013-3h14a3 3 0 013 3v10a3 3 0 01-3 3h-4l-5 5v-5h-5a3 3 0 01-3-3V13z" fill="white" fill-opacity="0.9"/>
+                <defs><linearGradient id="lgSmall" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#6C63FF"/><stop offset="1" stop-color="#3ECFCF"/></linearGradient></defs>
+              </svg>
+            </div>
+            <span id="header-room-name" class="header-room-name">#…</span>
+            
+            <!-- Creator Actions (visible only if current user is room creator) -->
+            <div id="creator-header-actions" class="creator-header-actions" hidden>
+              <span class="badge badge--public">Host</span>
+              <button id="room-settings-btn" class="icon-btn-sm" title="Room Settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </button>
+              <button id="delete-room-btn" class="icon-btn-sm icon-btn-danger" title="Delete Room">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
+            </div>
+          </div>
+
+
+          <!-- Nav links on the right -->
+          <div class="header-right">
+            <a href="/rooms.html" class="header-nav-link" aria-label="Browse rooms">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </a>
+            <a href="/profile.html" id="header-avatar-link" class="header-nav-link" aria-label="Profile">
+              <div id="header-avatar" class="header-avatar" aria-hidden="true"></div>
+            </a>
+            <div class="header-status">
+              <span id="status-dot" class="status-dot status-dot--connected" aria-hidden="true"></span>
+              <span id="status-text" class="status-text">Connected</span>
+            </div>
+          </div>
+        </header>
+
+        <main id="messages-container" class="messages-container" aria-label="Chat messages" aria-live="polite"></main>
+
+        <div id="typing-indicator" class="typing-indicator" aria-live="polite" hidden>
+          <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span id="typing-text" class="typing-text"></span>
+        </div>
+
+        <footer class="message-input-bar">
+          <div class="message-input-wrapper">
+            <textarea id="message-input" class="message-input" placeholder="Type a message…" rows="1" maxlength="500" aria-label="Message input"></textarea>
+            <div class="input-actions">
+              <span id="char-counter" class="char-counter" aria-live="polite">0 / 500</span>
+              <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ═══ ROOM SETTINGS MODAL (Creator Only) ═══ -->
+    <div id="room-settings-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" hidden>
+      <div class="modal-card" style="max-width: 440px;">
+        <h2 id="settings-modal-title" class="modal-title">Room Settings</h2>
+        <p class="modal-subtitle" style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Update room parameters and password</p>
+
+        <form id="room-settings-form" style="display: flex; flex-direction: column; gap: 1rem;">
+          <div id="settings-error" class="form-error" role="alert" hidden></div>
+          <div id="settings-success" class="form-success" role="status" hidden>Settings updated successfully</div>
+
+          <div class="form-group">
+            <label for="settings-name" class="form-label">Room Name</label>
+            <input type="text" id="settings-name" class="form-input" required minlength="3" maxlength="30" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Privacy Status</label>
+            <div class="toggle-group">
+              <label id="settings-toggle-public" class="toggle-option">
+                <input type="radio" name="settings-status" value="public" /> Public
+              </label>
+              <label id="settings-toggle-private" class="toggle-option">
+                <input type="radio" name="settings-status" value="private" /> Private
+              </label>
+            </div>
+          </div>
+
+          <div id="settings-pwd-group" class="form-group" hidden>
+            <label for="settings-pwd" class="form-label">New Password (leave blank to keep current)</label>
+            <input type="password" id="settings-pwd" class="form-input" placeholder="••••••••" />
+          </div>
+
+          <div class="form-group">
+            <label for="settings-max" class="form-label">
+              Max Members <span id="settings-max-val" class="label-badge">10</span>
+            </label>
+            <input type="range" id="settings-max" class="range-input" min="2" max="50" step="1" />
+          </div>
+
+          <!-- Banned users section -->
+          <div class="banned-section" style="border-top: 1px solid var(--border); padding-top: 1rem;">
+            <h3 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Restricted Users</h3>
+            <ul id="banned-users-list" style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; max-height: 120px; overflow-y: auto;">
+              <li style="font-size: 0.8rem; color: var(--text-muted);">Loading restricted list…</li>
+            </ul>
+          </div>
+
+          <div class="modal-actions" style="margin-top: 1rem;">
+            <button type="button" id="settings-cancel-btn" class="btn-ghost">Cancel</button>
+            <button type="submit" id="settings-save-btn" class="btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ═══ DELETE ROOM MODAL (Creator Only) ═══ -->
+    <div id="room-delete-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" hidden>
+      <div class="modal-card">
+        <h2 id="delete-modal-title" class="modal-title" style="color: #f87171;">Delete Room?</h2>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
+          Are you sure you want to delete <strong id="delete-room-name-display" style="color: var(--text-primary);">this room</strong>? All messages and room membership will be permanently erased for everyone.
+        </p>
+        <div class="modal-actions">
+          <button type="button" id="delete-cancel-btn" class="btn-ghost">Cancel</button>
+          <button type="button" id="delete-confirm-btn" class="btn-leave" style="background: #ef4444; color: #fff;">Delete Room</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/chat.js"></script>
+  </body>
+</html>
+

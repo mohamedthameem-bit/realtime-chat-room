@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatRoom</title>
+    <meta name="description" content="Real-time chat rooms." />
+    <script>
+      // On load: check if already signed in, redirect accordingly
+      fetch('/api/auth/me', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && data.user) {
+            window.location.replace('/home.html');
+          } else {
+            window.location.replace('/auth.html');
+          }
+        })
+        .catch(() => window.location.replace('/auth.html'));
+    </script>
+  </head>
+  <body>
+    <p style="font-family:sans-serif;color:#888;text-align:center;padding:3rem;">Redirecting…</p>
+  </body>
+</html>
