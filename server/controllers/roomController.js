@@ -2,8 +2,9 @@
  * roomController.js — CRUD and join/leave logic for chat rooms.
  */
 
-const bcrypt = require('bcryptjs');
-const Room   = require('../models/Room');
+const bcrypt       = require('bcryptjs');
+const Room         = require('../models/Room');
+const UserRoomRead = require('../models/UserRoomRead');
 const { validateRoomName, validateRoomPassword } = require('../middleware/validate');
 
 // ── List Rooms ────────────────────────────────────────────────────────────────
@@ -21,15 +22,45 @@ async function listRooms(req, res, next) {
       .populate('creator', 'username profilePic')
       .lean();
 
+    const userId = req.user._id.toString();
+
+    // Fetch all last-read records for this user in one query
+    const roomIds = rooms.map((r) => r._id.toString());
+    const readRecords = await UserRoomRead.find({
+      userId: req.user._id,
+      roomId: { $in: roomIds },
+    }).lean();
+    const readMap = {};
+    readRecords.forEach((r) => { readMap[r.roomId] = r.lastReadAt; });
+
+    // For each room, count messages newer than lastReadAt
+    const Message = require('../models/Message');
+    const unreadCounts = await Promise.all(
+      rooms.map(async (r) => {
+        const roomIdStr = r._id.toString();
+        const lastRead = readMap[roomIdStr];
+        if (!lastRead) return { roomId: roomIdStr, count: 0 };
+        const count = await Message.countDocuments({
+          room: roomIdStr,
+          createdAt: { $gt: lastRead },
+          deleted: { $ne: true },
+        });
+        return { roomId: roomIdStr, count };
+      })
+    );
+    const unreadMap = {};
+    unreadCounts.forEach(({ roomId, count }) => { unreadMap[roomId] = count; });
+
     const sanitized = rooms.map((r) => ({
       _id:          r._id,
       name:         r.name,
       status:       r.status,
       maxMembers:   r.maxMembers,
       memberCount:  r.members.length,
-      creator:      r.creator,  // { _id, username, profilePic }
+      creator:      r.creator,
       createdAt:    r.createdAt,
       isFull:       r.members.length >= r.maxMembers,
+      unreadCount:  unreadMap[r._id.toString()] || 0,
     }));
 
     return res.json({ success: true, rooms: sanitized });
@@ -501,6 +532,30 @@ async function getBannedUsers(req, res, next) {
   }
 }
 
+/**
+ * GET /api/rooms/:id/unread
+ * Returns the number of unread messages in the room for the current user.
+ */
+async function getUnreadCount(req, res, next) {
+  try {
+    const Message = require('../models/Message');
+    const roomId  = req.params.id;
+    const record  = await UserRoomRead.findOne({ userId: req.user._id, roomId }).lean();
+
+    if (!record) return res.json({ success: true, unreadCount: 0 });
+
+    const count = await Message.countDocuments({
+      room:      roomId,
+      createdAt: { $gt: record.lastReadAt },
+      deleted:   { $ne: true },
+    });
+
+    return res.json({ success: true, unreadCount: count });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listRooms,
   createRoom,
@@ -513,5 +568,6 @@ module.exports = {
   banMember,
   unbanMember,
   getBannedUsers,
+  getUnreadCount,
 };
 

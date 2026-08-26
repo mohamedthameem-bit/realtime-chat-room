@@ -95,22 +95,40 @@
 
         <main id="messages-container" class="messages-container" aria-label="Chat messages" aria-live="polite"></main>
 
-        <div id="typing-indicator" class="typing-indicator" aria-live="polite" hidden>
+        <div class="typing-indicator" id="typing-indicator" aria-live="polite" hidden>
           <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
           <span id="typing-text" class="typing-text"></span>
         </div>
 
-        <footer class="message-input-bar">
-          <div class="message-input-wrapper">
-            <textarea id="message-input" class="message-input" placeholder="Type a message…" rows="1" maxlength="500" aria-label="Message input"></textarea>
-            <div class="input-actions">
-              <span id="char-counter" class="char-counter" aria-live="polite">0 / 500</span>
-              <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              </button>
+        <!-- ═══ REPLY PREVIEW BAR (Phase 5) ═══ -->
+        <div id="reply-preview-bar" class="reply-preview-bar" hidden>
+          <svg class="reply-preview-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+          <span class="reply-preview-content">
+            <span class="reply-preview-name" id="reply-preview-name"></span>
+            <span class="reply-preview-text" id="reply-preview-text"></span>
+          </span>
+          <button type="button" id="reply-cancel-btn" class="reply-preview-cancel" aria-label="Cancel reply">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- ═══ MESSAGE INPUT FOOTER ═══ -->
+        <div style="position: relative;">
+          <!-- @Mention dropdown (Phase 5) -->
+          <div id="mention-dropdown" class="mention-dropdown" hidden></div>
+
+          <footer class="message-input-bar">
+            <div class="message-input-wrapper">
+              <textarea id="message-input" class="message-input" placeholder="Type a message…" rows="1" maxlength="500" aria-label="Message input"></textarea>
+              <div class="input-actions">
+                <span id="char-counter" class="char-counter" aria-live="polite">0 / 500</span>
+                <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+        </div>
       </div>
     </div>
 

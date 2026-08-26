@@ -1,20 +1,18 @@
 /**
- * handlers.js — Socket.IO event logic and in-memory presence tracking (Phase 2).
+ * handlers.js — Socket.IO event logic and in-memory presence tracking (Phase 5).
  *
- * Changes from Phase 1:
- *  - Identity comes from socket.user (set by socketAuth middleware) — NOT from client payload
- *  - join-room now takes { roomId } and looks up the Room in MongoDB
- *  - send-message uses socket.user.username — no client-supplied username
- *  - removeFromRoom also removes user from Room.members in DB
- *  - Duplicate username handling removed (users have unique accounts now)
- *
- * Presence data structure (unchanged):
- *   rooms: Map<roomId, Map<socketId, { username, userId }>>
+ * Phase 5 additions:
+ *  - send-message now saves userId and replyTo + replySnapshot
+ *  - New events: edit-message, delete-message, react-message
+ *  - join-room updates UserRoomRead timestamp
  */
 
-const Message = require('../models/Message');
-const Room    = require('../models/Room');
+const Message      = require('../models/Message');
+const Room         = require('../models/Room');
+const UserRoomRead = require('../models/UserRoomRead');
 const { validateMessage } = require('../middleware/validate');
+
+const ALLOWED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
 // In-memory store: roomId (string) → Map<socketId, { username, userId }>
 const rooms = new Map();
@@ -112,7 +110,6 @@ function registerHandlers(io, socket) {
       return;
     }
 
-
     const roomIdStr = roomId.toString();
 
     // Leave any previously joined room first
@@ -137,6 +134,17 @@ function registerHandlers(io, socket) {
 
     socket.join(roomIdStr);
     console.log(`[Socket] ${username} joined room "${room.name}" (${roomIdStr})`);
+
+    // Update last-read timestamp so unread count resets
+    try {
+      await UserRoomRead.findOneAndUpdate(
+        { userId, roomId: roomIdStr },
+        { lastReadAt: new Date() },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      console.error('[Socket] Failed to update UserRoomRead:', err.message);
+    }
 
     // Send message history (last 50, oldest → newest)
     try {
@@ -166,9 +174,9 @@ function registerHandlers(io, socket) {
 
   // ------------------------------------------------------------------
   // send-message
-  // Client sends: { message: string }
+  // Client sends: { message: string, replyToId?: string }
   // ------------------------------------------------------------------
-  socket.on('send-message', async ({ message } = {}) => {
+  socket.on('send-message', async ({ message, replyToId } = {}) => {
     if (!socket.currentRoomId) {
       socket.emit('error-message', { error: 'You must join a room before sending messages.' });
       return;
@@ -184,26 +192,163 @@ function registerHandlers(io, socket) {
     const roomId = socket.currentRoomId;
 
     try {
-      // Persist — store roomId (not room name) so queries are consistent
-      const saved = await Message.create({
-        username,                // String snapshot at send-time
+      // Build message document
+      const msgData = {
+        username,
+        userId,
         message: trimmedMessage,
         room:    roomId,
         createdAt: new Date(),
-      });
+      };
+
+      // Handle reply-to
+      if (replyToId) {
+        const parent = await Message.findById(replyToId).lean();
+        if (parent && !parent.deleted) {
+          msgData.replyTo = parent._id;
+          msgData.replySnapshot = {
+            username: parent.username,
+            message:  parent.deleted ? '[deleted]' : parent.message,
+          };
+        }
+      }
+
+      const saved = await Message.create(msgData);
 
       const payload = {
-        username:   saved.username,
-        message:    saved.message,
-        room:       saved.room,
-        createdAt:  saved.createdAt,
-        profilePic: profilePic || '',
+        _id:           saved._id.toString(),
+        username:      saved.username,
+        userId:        saved.userId ? saved.userId.toString() : null,
+        message:       saved.message,
+        room:          saved.room,
+        createdAt:     saved.createdAt,
+        profilePic:    profilePic || '',
+        replySnapshot: saved.replySnapshot || null,
+        reactions:     [],
       };
 
       io.to(roomId).emit('receive-message', payload);
     } catch (err) {
       console.error('[Socket] Failed to save message:', err.message);
       socket.emit('error-message', { error: 'Failed to send message. Please try again.' });
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // edit-message  (via socket for instant feedback)
+  // Client sends: { messageId: string, newText: string }
+  // ------------------------------------------------------------------
+  socket.on('edit-message', async ({ messageId, newText } = {}) => {
+    if (!socket.currentRoomId) return;
+
+    const text = (newText || '').trim();
+    if (!text || text.length > 500) {
+      socket.emit('error-message', { error: 'Message must be 1–500 characters.' });
+      return;
+    }
+
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+      if (!msg.userId || msg.userId.toString() !== userId.toString()) {
+        socket.emit('error-message', { error: 'You can only edit your own messages.' });
+        return;
+      }
+
+      msg.message  = text;
+      msg.edited   = true;
+      msg.editedAt = new Date();
+      await msg.save();
+
+      io.to(socket.currentRoomId).emit('message-edited', {
+        _id:      msg._id.toString(),
+        message:  msg.message,
+        editedAt: msg.editedAt,
+      });
+    } catch (err) {
+      console.error('[Socket] Failed to edit message:', err.message);
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // delete-message (via socket for instant feedback)
+  // Client sends: { messageId: string }
+  // ------------------------------------------------------------------
+  socket.on('delete-message', async ({ messageId } = {}) => {
+    if (!socket.currentRoomId) return;
+
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+
+      const isAuthor = msg.userId && msg.userId.toString() === userId.toString();
+      let isRoomCreator = false;
+
+      if (!isAuthor) {
+        const room = await Room.findById(socket.currentRoomId).lean();
+        if (room && room.creator.toString() === userId.toString()) isRoomCreator = true;
+      }
+
+      if (!isAuthor && !isRoomCreator) {
+        socket.emit('error-message', { error: 'You do not have permission to delete this message.' });
+        return;
+      }
+
+      msg.deleted   = true;
+      msg.deletedAt = new Date();
+      msg.reactions = [];
+      await msg.save();
+
+      io.to(socket.currentRoomId).emit('message-deleted', { _id: msg._id.toString() });
+    } catch (err) {
+      console.error('[Socket] Failed to delete message:', err.message);
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // react-message
+  // Client sends: { messageId: string, emoji: string }
+  // ------------------------------------------------------------------
+  socket.on('react-message', async ({ messageId, emoji } = {}) => {
+    if (!socket.currentRoomId) return;
+    if (!emoji || !ALLOWED_EMOJIS.includes(emoji)) return;
+
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+
+      const userIdStr = userId.toString();
+      let bucket = msg.reactions.find((r) => r.emoji === emoji);
+
+      if (bucket) {
+        const alreadyReacted = bucket.users.some((u) => u.toString() === userIdStr);
+        if (alreadyReacted) {
+          bucket.users = bucket.users.filter((u) => u.toString() !== userIdStr);
+          if (bucket.users.length === 0) {
+            msg.reactions = msg.reactions.filter((r) => r.emoji !== emoji);
+          }
+        } else {
+          bucket.users.push(userId);
+        }
+      } else {
+        msg.reactions.push({ emoji, users: [userId] });
+      }
+
+      msg.markModified('reactions');
+      await msg.save();
+
+      const reactionsPayload = msg.reactions.map((r) => ({
+        emoji: r.emoji,
+        count: r.users.length,
+        users: r.users.map((u) => u.toString()),
+      }));
+
+      io.to(socket.currentRoomId).emit('message-reacted', {
+        _id:       msg._id.toString(),
+        reactions: reactionsPayload,
+      });
+    } catch (err) {
+      console.error('[Socket] Failed to react to message:', err.message);
     }
   });
 

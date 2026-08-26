@@ -1,5 +1,5 @@
 /**
- * api.js — REST API routes (Phase 1 + Phase 2).
+ * api.js — REST API routes (Phase 1 + Phase 2 + Phase 5).
  */
 
 const express = require('express');
@@ -9,9 +9,12 @@ const { healthCheck, getRecentMessages } = require('../controllers/messageContro
 const { requireAuth } = require('../middleware/auth');
 
 // Mount Phase 2 route groups
-router.use('/auth',    require('./auth'));
-router.use('/rooms',   require('./rooms'));
-router.use('/profile', require('./profile'));
+router.use('/auth',     require('./auth'));
+router.use('/rooms',    require('./rooms'));
+router.use('/profile',  require('./profile'));
+
+// Mount Phase 5 message actions
+router.use('/messages', require('./messages'));
 
 // GET /api/health — public, no auth required
 router.get('/health', healthCheck);
@@ -20,3 +23,4 @@ router.get('/health', healthCheck);
 router.get('/messages/:room', requireAuth, getRecentMessages);
 
 module.exports = router;
+

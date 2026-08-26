@@ -82,7 +82,10 @@
 
     card.innerHTML = `
       <div class="room-card-header">
-        <div class="room-card-name">${escapeHTML(room.name)}</div>
+        <div class="room-card-name">
+          ${escapeHTML(room.name)}
+          ${room.unreadCount > 0 ? `<span class="unread-badge">${room.unreadCount > 99 ? '99+' : room.unreadCount}</span>` : ''}
+        </div>
         <div style="display:flex; align-items:center; gap:0.25rem;">
           ${isCreator ? '<span class="badge badge--public" style="background:rgba(108,99,255,0.2); color:var(--accent-light);">Host</span>' : ''}
           <span class="badge ${statusClass}">${statusLabel}</span>
@@ -103,6 +106,7 @@
         ${room.isFull ? 'Room Full' : 'Join'}
       </button>
     `;
+
 
     const joinBtn = card.querySelector('.btn-join');
     if (!room.isFull) {

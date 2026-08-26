@@ -1,11 +1,11 @@
 /**
- * chat.js — Main chat room client (Phase 2 + Creator Management).
+ * chat.js — Main chat room client (Phase 5: edit/delete, reply, reactions, mentions).
  */
 
 (function () {
   'use strict';
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
   function escapeHTML(str) {
     return String(str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -27,53 +27,82 @@
     for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
     return colors[Math.abs(h) % colors.length];
   }
+  // Render @mentions in a text string safely
+  function renderMentions(text, myUsername) {
+    const escaped = escapeHTML(text);
+    return escaped.replace(/@(\w+)/g, (match, name) => {
+      if (name.toLowerCase() === myUsername.toLowerCase()) {
+        return `<span class="mention-tag">${match}</span>`;
+      }
+      return `<span class="mention-tag">${match}</span>`;
+    });
+  }
+  function containsMention(text, username) {
+    const re = new RegExp(`@${username}\\b`, 'i');
+    return re.test(text);
+  }
 
-  // ── Read roomId from URL ──────────────────────────────────────────────────
+  // ── Read roomId from URL ────────────────────────────────────────────────────
   const params = new URLSearchParams(window.location.search);
   const roomId = params.get('roomId');
   if (!roomId) { window.location.href = '/rooms.html'; return; }
 
-  // ── DOM refs ──────────────────────────────────────────────────────────────
-  const messagesContainer   = document.getElementById('messages-container');
-  const messageInput        = document.getElementById('message-input');
-  const sendBtn             = document.getElementById('send-btn');
-  const charCounter         = document.getElementById('char-counter');
-  const userList            = document.getElementById('user-list');
-  const userCountBadge      = document.getElementById('user-count-badge');
-  const roomNameDisplay     = document.getElementById('room-name-display');
-  const headerRoomName      = document.getElementById('header-room-name');
-  const statusDot           = document.getElementById('status-dot');
-  const statusText          = document.getElementById('status-text');
-  const connectionBanner    = document.getElementById('connection-banner');
-  const connectionBannerText= document.getElementById('connection-banner-text');
-  const typingIndicator     = document.getElementById('typing-indicator');
-  const typingText          = document.getElementById('typing-text');
-  const leaveBtn            = document.getElementById('leave-btn');
-  const sidebarToggleBtn    = document.getElementById('sidebar-toggle-btn');
-  const sidebarCloseBtn     = document.getElementById('sidebar-close-btn');
-  const sidebarOverlay      = document.getElementById('sidebar-overlay');
-  const headerAvatar        = document.getElementById('header-avatar');
+  // ── DOM refs ───────────────────────────────────────────────────────────────
+  const messagesContainer    = document.getElementById('messages-container');
+  const messageInput         = document.getElementById('message-input');
+  const sendBtn              = document.getElementById('send-btn');
+  const charCounter          = document.getElementById('char-counter');
+  const userList             = document.getElementById('user-list');
+  const userCountBadge       = document.getElementById('user-count-badge');
+  const roomNameDisplay      = document.getElementById('room-name-display');
+  const headerRoomName       = document.getElementById('header-room-name');
+  const statusDot            = document.getElementById('status-dot');
+  const statusText           = document.getElementById('status-text');
+  const connectionBanner     = document.getElementById('connection-banner');
+  const connectionBannerText = document.getElementById('connection-banner-text');
+  const typingIndicator      = document.getElementById('typing-indicator');
+  const typingText           = document.getElementById('typing-text');
+  const leaveBtn             = document.getElementById('leave-btn');
+  const sidebarToggleBtn     = document.getElementById('sidebar-toggle-btn');
+  const sidebarCloseBtn      = document.getElementById('sidebar-close-btn');
+  const sidebarOverlay       = document.getElementById('sidebar-overlay');
+  const headerAvatar         = document.getElementById('header-avatar');
+  // Phase 5 new elements
+  const replyPreviewBar      = document.getElementById('reply-preview-bar');
+  const replyPreviewName     = document.getElementById('reply-preview-name');
+  const replyPreviewText     = document.getElementById('reply-preview-text');
+  const replyCancelBtn       = document.getElementById('reply-cancel-btn');
+  const mentionDropdown      = document.getElementById('mention-dropdown');
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let myUsername = null;
+  let myUsername   = null;
+  let myUserId     = null;
   let myProfilePic = null;
   let isNearBottom = true;
-  let lastRenderedDate = null;
-  let lastMessageUsername = null;
-  let lastMessageTimestamp = null;
+  let lastRenderedDate      = null;
+  let lastMessageUsername   = null;
+  let lastMessageTimestamp  = null;
   const typingUsers = new Map();
   let typingTimeout = null;
 
   // Creator state
-  let isCreator = false;
+  let isCreator     = false;
   let currentRoomData = null;
+
+  // Phase 5 state
+  let replyToId       = null;  // _id of message being replied to
+  let onlineUsersList = [];    // current online users for @mention
+  let mentionSearch   = '';
+  let mentionActive   = false;
+  let socketRef       = null;
 
   // ── Auth + Init ───────────────────────────────────────────────────────────
   async function init() {
     const user = await API.whoami();
     if (!user) { window.location.href = '/auth.html'; return; }
 
-    myUsername = user.username;
+    myUsername   = user.username;
+    myUserId     = user._id;
     myProfilePic = user.profilePic || '';
 
     // Render header avatar
@@ -104,7 +133,23 @@
       headerRoomName.textContent  = '#room';
     }
 
+    // Reply cancel
+    replyCancelBtn.addEventListener('click', clearReply);
+
     initSocket();
+  }
+
+  // ── Reply state helpers ───────────────────────────────────────────────────
+  function setReply(msgId, username, text) {
+    replyToId = msgId;
+    replyPreviewName.textContent = `@${username}`;
+    replyPreviewText.textContent = text;
+    replyPreviewBar.hidden = false;
+    messageInput.focus();
+  }
+  function clearReply() {
+    replyToId = null;
+    replyPreviewBar.hidden = true;
   }
 
   // ── Smart auto-scroll ─────────────────────────────────────────────────────
@@ -128,16 +173,47 @@
     }
   }
 
-  // ── Render: chat message ─────────────────────────────────────────────────
+  // ── Render reactions bar ──────────────────────────────────────────────────
+  function renderReactionsBar(wrapper, reactions, msgId) {
+    let bar = wrapper.querySelector('.reactions-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'reactions-bar';
+      wrapper.appendChild(bar);
+    }
+    bar.innerHTML = '';
+    (reactions || []).forEach(({ emoji, count, users }) => {
+      const isMine = users && users.includes(myUserId);
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = `reaction-pill${isMine ? ' reaction-pill--mine' : ''}`;
+      pill.title = `${emoji} ${count}`;
+      pill.innerHTML = `<span class="reaction-pill-emoji">${emoji}</span><span class="reaction-pill-count">${count}</span>`;
+      pill.addEventListener('click', () => {
+        if (socketRef) socketRef.emit('react-message', { messageId: msgId, emoji });
+      });
+      bar.appendChild(pill);
+    });
+  }
+
+  // ── Render: chat message ──────────────────────────────────────────────────
   function renderMessage(msg, fromHistory = false) {
+    if (msg.deleted) {
+      // render deleted placeholder if from history (new deleted events handled by updateDeleted)
+      if (!fromHistory) return;
+    }
+
     const isOwn = msg.username === myUsername;
     const grouped = shouldGroup(msg.username, msg.createdAt);
+    const isMentioned = !isOwn && containsMention(msg.message || '', myUsername);
 
     maybeInsertDateSeparator(msg.createdAt);
 
     const wrapper = document.createElement('div');
     wrapper.className = `message-wrapper message-wrapper--${isOwn ? 'own' : 'other'}`;
     if (grouped) wrapper.classList.add('message-wrapper--grouped');
+    if (isMentioned) wrapper.classList.add('message-wrapper--mentioned');
+    wrapper.dataset.msgId = msg._id ? msg._id.toString() : '';
 
     if (!isOwn && !grouped) {
       const sender = document.createElement('div');
@@ -146,15 +222,46 @@
       wrapper.appendChild(sender);
     }
 
+    // ── Reply quote ────────────────────────────────────────────────────────
+    if (msg.replySnapshot && msg.replySnapshot.username) {
+      const quote = document.createElement('div');
+      quote.className = 'reply-quote';
+      quote.innerHTML = `<div class="reply-quote-name">${escapeHTML(msg.replySnapshot.username)}</div><div class="reply-quote-text">${escapeHTML(msg.replySnapshot.message || '')}</div>`;
+      wrapper.appendChild(quote);
+    }
+
+    // ── Bubble ────────────────────────────────────────────────────────────
     const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.textContent = msg.message;
+    bubble.className = `message-bubble${msg.deleted ? ' message-bubble--deleted' : ''}`;
+    if (msg.deleted) {
+      bubble.textContent = '🚫 Message deleted';
+    } else {
+      bubble.innerHTML = renderMentions(msg.message || '', myUsername);
+    }
     wrapper.appendChild(bubble);
 
-    const time = document.createElement('div');
-    time.className = 'message-time';
-    time.textContent = formatTime(msg.createdAt);
-    wrapper.appendChild(time);
+    // ── Time + edited label ───────────────────────────────────────────────
+    const timeRow = document.createElement('div');
+    timeRow.className = 'message-time';
+    timeRow.textContent = formatTime(msg.createdAt);
+    if (msg.edited && !msg.deleted) {
+      const editedLabel = document.createElement('span');
+      editedLabel.className = 'msg-edited-label';
+      editedLabel.textContent = '(edited)';
+      timeRow.appendChild(editedLabel);
+    }
+    wrapper.appendChild(timeRow);
+
+    // ── Reactions bar ─────────────────────────────────────────────────────
+    if (!msg.deleted && msg.reactions && msg.reactions.length > 0) {
+      renderReactionsBar(wrapper, msg.reactions, msg._id);
+    }
+
+    // ── Action menu (visible on hover) ───────────────────────────────────
+    if (!msg.deleted) {
+      const actions = buildActionMenu(msg, isOwn, wrapper);
+      wrapper.appendChild(actions);
+    }
 
     messagesContainer.appendChild(wrapper);
 
@@ -164,9 +271,197 @@
     if (!fromHistory) scrollToBottom();
   }
 
+  const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+  function buildActionMenu(msg, isOwn, wrapper) {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+
+    // React button (opens emoji picker)
+    const reactBtn = document.createElement('button');
+    reactBtn.type = 'button';
+    reactBtn.className = 'msg-action-btn';
+    reactBtn.title = 'React';
+    reactBtn.textContent = '😊';
+    reactBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleReactionPicker(wrapper, msg._id);
+    });
+    actions.appendChild(reactBtn);
+
+    // Reply button
+    const replyBtn = document.createElement('button');
+    replyBtn.type = 'button';
+    replyBtn.className = 'msg-action-btn';
+    replyBtn.title = 'Reply';
+    replyBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>`;
+    replyBtn.addEventListener('click', () => {
+      const text = msg.message || '';
+      setReply(msg._id, msg.username, text.slice(0, 60) + (text.length > 60 ? '…' : ''));
+    });
+    actions.appendChild(replyBtn);
+
+    // Edit button (only own non-deleted messages)
+    if (isOwn && !msg.deleted) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'msg-action-btn';
+      editBtn.title = 'Edit';
+      editBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+      editBtn.addEventListener('click', () => startInlineEdit(wrapper, msg));
+      actions.appendChild(editBtn);
+    }
+
+    // Delete button (own OR creator)
+    const canDelete = isOwn || isCreator;
+    if (canDelete && !msg.deleted) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'msg-action-btn msg-action-btn--danger';
+      delBtn.title = 'Delete';
+      delBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+      delBtn.addEventListener('click', () => {
+        if (confirm('Delete this message?')) {
+          if (socketRef) socketRef.emit('delete-message', { messageId: msg._id });
+        }
+      });
+      actions.appendChild(delBtn);
+    }
+
+    return actions;
+  }
+
+  function toggleReactionPicker(wrapper, msgId) {
+    // Close any existing pickers first
+    document.querySelectorAll('.reaction-picker').forEach((p) => p.remove());
+
+    const picker = document.createElement('div');
+    picker.className = 'reaction-picker';
+    EMOJIS.forEach((emoji) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'reaction-emoji-btn';
+      btn.textContent = emoji;
+      btn.title = emoji;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        picker.remove();
+        if (socketRef) socketRef.emit('react-message', { messageId: msgId, emoji });
+      });
+      picker.appendChild(btn);
+    });
+
+    wrapper.appendChild(picker);
+
+    // Close picker when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', function closePicker() {
+        picker.remove();
+        document.removeEventListener('click', closePicker);
+      }, { once: true });
+    }, 10);
+  }
+
+  function startInlineEdit(wrapper, msg) {
+    const bubble = wrapper.querySelector('.message-bubble');
+    if (!bubble) return;
+
+    // Replace bubble content with textarea
+    const originalText = msg.message;
+    const textarea = document.createElement('textarea');
+    textarea.className = 'msg-edit-area';
+    textarea.value = originalText;
+    textarea.rows = 1;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+
+    const editActions = document.createElement('div');
+    editActions.className = 'msg-edit-actions';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'msg-edit-save';
+    saveBtn.textContent = 'Save';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'msg-edit-cancel';
+    cancelBtn.textContent = 'Cancel';
+
+    editActions.appendChild(cancelBtn);
+    editActions.appendChild(saveBtn);
+
+    bubble.innerHTML = '';
+    bubble.appendChild(textarea);
+    bubble.appendChild(editActions);
+    textarea.focus();
+    textarea.selectionStart = textarea.value.length;
+
+    textarea.addEventListener('input', () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    });
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveBtn.click(); }
+      if (e.key === 'Escape') cancelBtn.click();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      bubble.innerHTML = renderMentions(originalText, myUsername);
+    });
+
+    saveBtn.addEventListener('click', () => {
+      const newText = textarea.value.trim();
+      if (!newText || newText === originalText) { cancelBtn.click(); return; }
+      if (socketRef) socketRef.emit('edit-message', { messageId: msg._id, newText });
+      // Optimistic update
+      bubble.innerHTML = renderMentions(newText, myUsername);
+      msg.message = newText;
+    });
+  }
+
   function shouldGroup(username, date) {
     if (!lastMessageUsername || lastMessageUsername !== username) return false;
     return new Date(date) - new Date(lastMessageTimestamp) < 60_000;
+  }
+
+  // ── Update existing message in DOM after edit ─────────────────────────────
+  function updateEditedMessage({ _id, message }) {
+    const wrapper = messagesContainer.querySelector(`[data-msg-id="${_id}"]`);
+    if (!wrapper) return;
+    const bubble = wrapper.querySelector('.message-bubble');
+    if (!bubble || bubble.classList.contains('message-bubble--deleted')) return;
+    bubble.innerHTML = renderMentions(message, myUsername);
+
+    // Add/update (edited) label in time row
+    const timeRow = wrapper.querySelector('.message-time');
+    if (timeRow && !timeRow.querySelector('.msg-edited-label')) {
+      const lbl = document.createElement('span');
+      lbl.className = 'msg-edited-label';
+      lbl.textContent = '(edited)';
+      timeRow.appendChild(lbl);
+    }
+  }
+
+  // ── Update existing message in DOM after delete ───────────────────────────
+  function updateDeletedMessage({ _id }) {
+    const wrapper = messagesContainer.querySelector(`[data-msg-id="${_id}"]`);
+    if (!wrapper) return;
+    const bubble = wrapper.querySelector('.message-bubble');
+    if (!bubble) return;
+    bubble.className = 'message-bubble message-bubble--deleted';
+    bubble.innerHTML = '🚫 Message deleted';
+
+    // Remove action menu and reactions
+    wrapper.querySelector('.msg-actions')?.remove();
+    wrapper.querySelector('.reactions-bar')?.remove();
+  }
+
+  // ── Update reactions in DOM ───────────────────────────────────────────────
+  function updateReactions({ _id, reactions }) {
+    const wrapper = messagesContainer.querySelector(`[data-msg-id="${_id}"]`);
+    if (!wrapper) return;
+    renderReactionsBar(wrapper, reactions, _id);
   }
 
   // ── Render: system message ────────────────────────────────────────────────
@@ -181,6 +476,7 @@
 
   // ── Online users panel ────────────────────────────────────────────────────
   function renderOnlineUsers(users) {
+    onlineUsersList = users;
     userList.innerHTML = '';
     userCountBadge.textContent = users.length;
 
@@ -244,6 +540,51 @@
     }
   }
 
+  // ── @Mention dropdown ─────────────────────────────────────────────────────
+  function showMentionDropdown(query) {
+    const filtered = onlineUsersList.filter(
+      (u) => u.username !== myUsername && u.username.toLowerCase().startsWith(query.toLowerCase())
+    );
+
+    if (!filtered.length) { mentionDropdown.hidden = true; return; }
+
+    mentionDropdown.innerHTML = '';
+    filtered.slice(0, 8).forEach((u, i) => {
+      const item = document.createElement('div');
+      item.className = `mention-item${i === 0 ? ' mention-item--active' : ''}`;
+      const color = avatarColor(u.username);
+      item.innerHTML = `<div class="mention-item-avatar" style="background:${color};">${escapeHTML(u.username.slice(0,2).toUpperCase())}</div><span class="mention-item-name">@${escapeHTML(u.username)}</span>`;
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        insertMention(u.username);
+      });
+      mentionDropdown.appendChild(item);
+    });
+
+    mentionDropdown.hidden = false;
+  }
+
+  function hideMentionDropdown() {
+    mentionDropdown.hidden = true;
+    mentionActive = false;
+    mentionSearch = '';
+  }
+
+  function insertMention(username) {
+    const val = messageInput.value;
+    const pos = messageInput.selectionStart;
+    // Find the @... being typed
+    const before = val.slice(0, pos);
+    const atIdx = before.lastIndexOf('@');
+    const newVal = val.slice(0, atIdx) + `@${username} ` + val.slice(pos);
+    messageInput.value = newVal;
+    const newPos = atIdx + username.length + 2;
+    messageInput.setSelectionRange(newPos, newPos);
+    hideMentionDropdown();
+    updateSendButton();
+    messageInput.focus();
+  }
+
   // ── Connection status ─────────────────────────────────────────────────────
   function setStatus(state) {
     statusDot.className = `status-dot status-dot--${state}`;
@@ -272,6 +613,7 @@
       reconnectionDelayMax: 5000,
       randomizationFactor:  0.3,
     });
+    socketRef = socket;
 
     socket.on('connect', () => {
       setStatus('connected');
@@ -294,6 +636,11 @@
       renderMessage(msg, false);
       clearTypingFor(msg.username);
     });
+
+    // Phase 5 real-time events
+    socket.on('message-edited',  (data) => updateEditedMessage(data));
+    socket.on('message-deleted', (data) => updateDeletedMessage(data));
+    socket.on('message-reacted', (data) => updateReactions(data));
 
     socket.on('user-joined', ({ message: msg }) => renderSystemMessage(msg));
     socket.on('user-left',   ({ message: msg }) => renderSystemMessage(msg));
@@ -352,23 +699,65 @@
       if (len > 450) charCounter.classList.add('char-counter--warn');
       if (len > 490) charCounter.classList.add('char-counter--error');
       if (messageInput.value.trim()) emitTyping();
+
+      // @mention detection
+      const val = messageInput.value;
+      const pos = messageInput.selectionStart;
+      const beforeCursor = val.slice(0, pos);
+      const atMatch = beforeCursor.match(/@(\w*)$/);
+      if (atMatch) {
+        mentionActive = true;
+        mentionSearch = atMatch[1];
+        showMentionDropdown(mentionSearch);
+      } else {
+        hideMentionDropdown();
+      }
     });
 
     messageInput.addEventListener('keydown', (e) => {
+      if (mentionActive && !mentionDropdown.hidden) {
+        if (e.key === 'Escape') { e.preventDefault(); hideMentionDropdown(); return; }
+        if (e.key === 'Tab' || e.key === 'Enter') {
+          const activeItem = mentionDropdown.querySelector('.mention-item--active');
+          if (activeItem) {
+            e.preventDefault();
+            const name = activeItem.querySelector('.mention-item-name').textContent.slice(1);
+            insertMention(name);
+            return;
+          }
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          const items = Array.from(mentionDropdown.querySelectorAll('.mention-item'));
+          const curr = mentionDropdown.querySelector('.mention-item--active');
+          let idx = items.indexOf(curr);
+          items.forEach(i => i.classList.remove('mention-item--active'));
+          if (e.key === 'ArrowDown') idx = (idx + 1) % items.length;
+          else idx = (idx - 1 + items.length) % items.length;
+          items[idx]?.classList.add('mention-item--active');
+          return;
+        }
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });
+
     sendBtn.addEventListener('click', sendMessage);
 
     function sendMessage() {
       const text = messageInput.value.trim();
       if (!text || text.length > 500 || !socket.connected) return;
-      socket.emit('send-message', { message: text });
+      const payload = { message: text };
+      if (replyToId) payload.replyToId = replyToId;
+      socket.emit('send-message', payload);
       messageInput.value = '';
       autoResizeTextarea(); updateSendButton();
       charCounter.textContent = '0 / 500';
       charCounter.className = 'char-counter';
       socket.emit('stop-typing');
       if (typingTimeout) { clearTimeout(typingTimeout); typingTimeout = null; }
+      clearReply();
+      hideMentionDropdown();
       messageInput.focus();
     }
 

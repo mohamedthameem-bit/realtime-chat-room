@@ -17,6 +17,7 @@ const {
   banMember,
   unbanMember,
   getBannedUsers,
+  getUnreadCount,
 } = require('../controllers/roomController');
 const { requireAuth } = require('../middleware/auth');
 
@@ -55,6 +56,9 @@ router.post('/:id/unban',   unbanMember);
 
 // GET    /api/rooms/:id/banned — list restricted members (creator only)
 router.get('/:id/banned',   getBannedUsers);
+
+// GET    /api/rooms/:id/unread — unread message count for current user
+router.get('/:id/unread',   getUnreadCount);
 
 module.exports = router;
 

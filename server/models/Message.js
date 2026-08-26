@@ -1,16 +1,26 @@
 /**
- * Message.js — Mongoose model for chat messages.
+ * Message.js — Mongoose model for chat messages (Phase 5 extended).
  */
 
 const mongoose = require('mongoose');
 
+const reactionSchema = new mongoose.Schema({
+  emoji: { type: String, required: true },
+  users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+}, { _id: false });
+
 const messageSchema = new mongoose.Schema(
   {
+    // ── Core fields ──────────────────────────────────────────────────────────
     username: {
       type: String,
       required: [true, 'Username is required'],
       trim: true,
       maxlength: [30, 'Username cannot exceed 30 characters'],
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
     },
     message: {
       type: String,
@@ -29,9 +39,32 @@ const messageSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    // ── Phase 5: Edit & Delete ───────────────────────────────────────────────
+    edited: { type: Boolean, default: false },
+    editedAt: { type: Date },
+    deleted: { type: Boolean, default: false },
+    deletedAt: { type: Date },
+
+    // ── Phase 5: Reply to message ────────────────────────────────────────────
+    replyTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Message',
+      default: null,
+    },
+    // Snapshot of reply-to message data (so deleted replies still show context)
+    replySnapshot: {
+      username: String,
+      message: String,
+    },
+
+    // ── Phase 5: Reactions ───────────────────────────────────────────────────
+    reactions: {
+      type: [reactionSchema],
+      default: [],
+    },
   },
   {
-    // Disable the default timestamps so our custom createdAt is the single source of truth
     timestamps: false,
     versionKey: false,
   }
