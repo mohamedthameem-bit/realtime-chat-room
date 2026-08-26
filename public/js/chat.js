@@ -102,7 +102,7 @@
     if (!user) { window.location.href = '/auth.html'; return; }
 
     myUsername   = user.username;
-    myUserId     = user._id;
+    myUserId     = String(user._id);  // always a plain string for ID comparisons
     myProfilePic = user.profilePic || '';
 
     // Render header avatar
@@ -175,26 +175,37 @@
 
   // ── Render reactions bar ──────────────────────────────────────────────────
   function renderReactionsBar(wrapper, reactions, msgId) {
-    let bar = wrapper.querySelector('.reactions-bar');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.className = 'reactions-bar';
-      wrapper.appendChild(bar);
-    }
-    bar.innerHTML = '';
-    (reactions || []).forEach(({ emoji, count, users }) => {
-      const isMine = users && users.includes(myUserId);
+    // Normalize reactions from both history (no count) and socket events (has count)
+    const normalized = (reactions || []).filter((r) => r.users && r.users.length > 0);
+
+    // Remove existing bar first
+    const existingBar = wrapper.querySelector('.reactions-bar');
+    if (existingBar) existingBar.remove();
+
+    // Nothing to render → done
+    if (!normalized.length) return;
+
+    const bar = document.createElement('div');
+    bar.className = 'reactions-bar';
+
+    normalized.forEach(({ emoji, count, users }) => {
+      const actualCount = (count !== undefined) ? count : users.length;
+      // Compare as strings — handles both ObjectId objects and plain strings
+      const isMine = users && users.some((u) => String(u) === myUserId);
       const pill = document.createElement('button');
       pill.type = 'button';
       pill.className = `reaction-pill${isMine ? ' reaction-pill--mine' : ''}`;
-      pill.title = `${emoji} ${count}`;
-      pill.innerHTML = `<span class="reaction-pill-emoji">${emoji}</span><span class="reaction-pill-count">${count}</span>`;
+      pill.title = `${emoji} ${actualCount}`;
+      pill.innerHTML = `<span class="reaction-pill-emoji">${emoji}</span><span class="reaction-pill-count">${actualCount}</span>`;
       pill.addEventListener('click', () => {
         if (socketRef) socketRef.emit('react-message', { messageId: msgId, emoji });
       });
       bar.appendChild(pill);
     });
+
+    wrapper.appendChild(bar);
   }
+
 
   // ── Render: chat message ──────────────────────────────────────────────────
   function renderMessage(msg, fromHistory = false) {
