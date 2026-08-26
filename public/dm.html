@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DM - ChatRoom</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Mobile Header (outside Sidebar) -->
+  <div class="mobile-room-header">
+    <a href="/dms.html" class="mobile-back-btn" aria-label="Back to DMs">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    </a>
+    <div id="mobile-header-avatar" class="mobile-header-avatar"></div>
+    <div class="mobile-header-info">
+      <div id="mobile-header-name" class="mobile-header-name">Loading...</div>
+      <div id="mobile-header-status" class="mobile-header-status">Connecting...</div>
+    </div>
+  </div>
+
+  <div class="app-layout">
+    <main class="app-main chat-main">
+      <!-- Connection Banner -->
+      <div id="connection-banner" class="connection-banner" hidden>
+        <div class="spinner"></div>
+        <span id="connection-text">Connecting...</span>
+      </div>
+
+      <!-- Chat Header (Desktop) -->
+      <header class="chat-header fade-in">
+        <div class="chat-header-info">
+          <div id="header-avatar" class="chat-header-avatar"></div>
+          <div>
+            <h2 id="header-name" class="chat-header-name" style="display:flex; align-items:center; gap:0.5rem;">
+              Loading...
+            </h2>
+            <div id="header-status" class="chat-header-meta">Connecting...</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Messages Area -->
+      <div id="messages-container" class="messages-container fade-up">
+        <!-- Messages injected here -->
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="chat-input-wrapper fade-up">
+        <form id="chat-form" class="chat-form">
+          <div id="reply-preview-bar" class="reply-preview-bar" hidden>
+            <div class="reply-preview-content">
+              <span class="reply-preview-author" id="reply-preview-author"></span>
+              <span class="reply-preview-text" id="reply-preview-text"></span>
+            </div>
+            <button type="button" id="reply-cancel-btn" class="reply-cancel-btn" title="Cancel reply">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          
+          <div class="chat-input-inner">
+            <textarea id="message-input" class="chat-input" placeholder="Message..." rows="1" autocomplete="off"></textarea>
+            
+            <button type="submit" id="send-btn" class="send-btn" aria-label="Send message" disabled>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/dm.js"></script>
+  <div id="toast-container"></div>
+</body>
+</html>

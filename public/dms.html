@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Direct Messages - ChatRoom</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .dms-container { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    .dms-header { margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-main">
+      <div class="dms-container fade-up">
+        <div class="dms-header">
+          <h1>Direct Messages</h1>
+        </div>
+
+        <div id="dms-list" class="dm-list"></div>
+        <div id="dms-empty" class="empty-state" hidden>You don't have any direct messages yet. Go to Friends or Search to start a conversation!</div>
+      </div>
+    </main>
+  </div>
+  
+  <script src="/js/api.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/dms.js"></script>
+  <div id="toast-container"></div>
+</body>
+</html>

@@ -8,7 +8,7 @@ const path    = require('path');
 const fs      = require('fs');
 const router  = express.Router();
 
-const { getProfile, updateProfile, uploadAvatar } = require('../controllers/profileController');
+const { getProfile, updateProfile, uploadAvatar, updateStatus } = require('../controllers/profileController');
 const { requireAuth } = require('../middleware/auth');
 
 // ── Multer configuration ──────────────────────────────────────────────────────
@@ -53,6 +53,9 @@ router.put('/',           updateProfile);
 
 // POST /api/profile/avatar  — upload a new avatar image
 router.post('/avatar', avatarUpload.single('avatar'), uploadAvatar);
+
+// PATCH /api/profile/status — update user status
+router.patch('/status', updateStatus);
 
 // Handle multer errors (file type / size violations)
 router.use((err, req, res, next) => {

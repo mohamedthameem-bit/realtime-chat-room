@@ -28,6 +28,9 @@
     logout:  I('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
     menu:    I('<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>'),
     close:   I('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+    dms:     I('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'),
+    search:  I('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
+    friends: I('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
   };
 
   const LOGO_SVG = `<svg class="snav-logo-svg" width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true">
@@ -41,9 +44,11 @@
   // ── Nav item definitions ────────────────────────────────────────────────────
   const NAV_ITEMS = [
     { id: 'home',    label: 'Home',      href: '/home.html',        icon: ICONS.home    },
-    { id: 'create',  label: 'Create',    href: '/create-room.html', icon: ICONS.create  },
-    { id: 'join',    label: 'Join',      href: '/rooms.html',       icon: ICONS.join    },
+    { id: 'dms',     label: 'DMs',       href: '/dms.html',         icon: ICONS.dms     },
+    { id: 'friends', label: 'Friends',   href: '/friends.html',     icon: ICONS.friends },
+    { id: 'search',  label: 'Search',    href: '/search.html',      icon: ICONS.search  },
     { id: 'rooms',   label: 'All Rooms', href: '/rooms.html',       icon: ICONS.rooms   },
+    { id: 'create',  label: 'Create',    href: '/create-room.html', icon: ICONS.create  },
     { id: 'profile', label: 'Profile',   href: '/profile.html',     icon: ICONS.profile },
   ];
 
@@ -68,6 +73,9 @@
     if (p === '/create-room.html')              return 'create';
     if (p === '/profile.html')                  return 'profile';
     if (p === '/rooms.html')                    return 'rooms';
+    if (p === '/dms.html' || p === '/dm.html')  return 'dms';
+    if (p === '/friends.html')                  return 'friends';
+    if (p === '/search.html' || p === '/user-profile.html') return 'search';
     // /chat.html — no active highlight (user is inside a room)
     return null;
   }
@@ -84,13 +92,15 @@
 
     const navHTML = NAV_ITEMS.map(({ id, label, href, icon }) => {
       const isActive = activeId === id;
+      const badgeId = id === 'friends' ? 'id="nav-friends-badge"' : '';
       return `<li class="snav-item">
         <a href="${href}"
            class="snav-link${isActive ? ' snav-link--active' : ''}"
            data-nav-id="${id}"
            ${isActive ? 'aria-current="page"' : ''}>
-          <span class="snav-icon">${icon}</span>
-          <span class="snav-label">${label}</span>
+           <span class="snav-icon">${icon}</span>
+           <span class="snav-label">${label}</span>
+           ${id === 'friends' ? `<span ${badgeId} class="nav-badge" style="display:none;">0</span>` : ''}
         </a>
       </li>`;
     }).join('');
@@ -124,14 +134,20 @@
         </div>
 
         <!-- Signed-in user -->
-        <div class="snav-user">
+        <div class="snav-user snav-status-picker" id="snav-status-picker">
           <div class="snav-user-avatar">${avatarHTML}</div>
           <div class="snav-user-info">
             <span class="snav-user-name" title="${escapeHTML(user.username)}">${escapeHTML(user.username)}</span>
             <span class="snav-user-online">
-              <span class="snav-online-dot" aria-hidden="true"></span>
-              Online
+              <span class="status-dot" id="snav-status-dot" data-status="${user.status || 'online'}"></span>
+              <span id="snav-status-text">${(user.status || 'online').charAt(0).toUpperCase() + (user.status || 'online').slice(1)}</span>
             </span>
+          </div>
+          <div class="snav-status-dropdown" id="snav-status-dropdown">
+            <button class="status-option" data-status="online"><span class="status-dot" data-status="online"></span> Online</button>
+            <button class="status-option" data-status="away"><span class="status-dot" data-status="away"></span> Away</button>
+            <button class="status-option" data-status="busy"><span class="status-dot" data-status="busy"></span> Busy</button>
+            <button class="status-option" data-status="invisible"><span class="status-dot" data-status="invisible"></span> Invisible</button>
           </div>
         </div>
 
@@ -262,6 +278,60 @@
     });
   }
 
+  // ── Status Picker ────────────────────────────────────────────────────────────
+  function initStatusPicker() {
+    const picker = document.getElementById('snav-status-picker');
+    const dropdown = document.getElementById('snav-status-dropdown');
+    const dot = document.getElementById('snav-status-dot');
+    const text = document.getElementById('snav-status-text');
+
+    if (!picker || !dropdown) return;
+
+    picker.addEventListener('click', (e) => {
+      // Toggle if clicking the picker area, but not if clicking an option
+      if (!e.target.closest('.status-option')) {
+        dropdown.classList.toggle('show');
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!picker.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+
+    dropdown.querySelectorAll('.status-option').forEach(opt => {
+      opt.addEventListener('click', async (e) => {
+        const newStatus = opt.getAttribute('data-status');
+        dot.setAttribute('data-status', newStatus);
+        text.textContent = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+        dropdown.classList.remove('show');
+        
+        try {
+          await API.patch('/api/profile/status', { status: newStatus });
+        } catch (err) {
+          console.error('Failed to update status', err);
+        }
+      });
+    });
+  }
+
+  // ── Fetch Friend Requests Badge ───────────────────────────────────────────────
+  async function updateFriendBadge() {
+    const badge = document.getElementById('nav-friends-badge');
+    if (!badge) return;
+    try {
+      const res = await API.get('/api/friends/requests');
+      const count = res.requests.length;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (err) {}
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
     if (typeof API === 'undefined') {
@@ -276,6 +346,11 @@
     initMobileToggle();
     initNavigation();
     initLogout();
+    initStatusPicker();
+    updateFriendBadge();
+
+    // Re-check badge every 30 seconds
+    setInterval(updateFriendBadge, 30000);
   }
 
   init();

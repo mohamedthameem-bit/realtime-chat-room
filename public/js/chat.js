@@ -42,6 +42,25 @@
     return re.test(text);
   }
 
+  // ── Toasts ──────────────────────────────────────────────────────────────────
+  function showToast(message) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+      <span>${escapeHTML(message)}</span>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(100%)';
+      toast.style.transition = 'opacity 0.3s, transform 0.3s';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
   // ── Read roomId from URL ────────────────────────────────────────────────────
   const params = new URLSearchParams(window.location.search);
   const roomId = params.get('roomId');
@@ -89,9 +108,10 @@
   let isCreator     = false;
   let currentRoomData = null;
 
-  // Phase 5 state
-  let replyToId       = null;  // _id of message being replied to
-  let onlineUsersList = [];    // current online users for @mention
+  // Phase 5/6 state
+  let replyToId       = null;
+  let onlineUsersList = [];
+  let onlineUsersGlobal = {};
   let mentionSearch   = '';
   let mentionActive   = false;
   let socketRef       = null;
@@ -102,10 +122,9 @@
     if (!user) { window.location.href = '/auth.html'; return; }
 
     myUsername   = user.username;
-    myUserId     = String(user._id);  // always a plain string for ID comparisons
+    myUserId     = String(user._id);
     myProfilePic = user.profilePic || '';
 
-    // Render header avatar
     if (myProfilePic) {
       headerAvatar.innerHTML = `<img src="${escapeHTML(myProfilePic)}" alt="${escapeHTML(myUsername)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" />`;
     } else {
@@ -113,7 +132,6 @@
       headerAvatar.innerHTML = `<div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#fff;">${escapeHTML(myUsername.slice(0,2).toUpperCase())}</div>`;
     }
 
-    // Fetch room name & creator status
     try {
       const data = await API.get(`/api/rooms/${roomId}`);
       currentRoomData = data.room;
@@ -133,9 +151,7 @@
       headerRoomName.textContent  = '#room';
     }
 
-    // Reply cancel
     replyCancelBtn.addEventListener('click', clearReply);
-
     initSocket();
   }
 
@@ -175,14 +191,9 @@
 
   // ── Render reactions bar ──────────────────────────────────────────────────
   function renderReactionsBar(wrapper, reactions, msgId) {
-    // Normalize reactions from both history (no count) and socket events (has count)
     const normalized = (reactions || []).filter((r) => r.users && r.users.length > 0);
-
-    // Remove existing bar first
     const existingBar = wrapper.querySelector('.reactions-bar');
     if (existingBar) existingBar.remove();
-
-    // Nothing to render → done
     if (!normalized.length) return;
 
     const bar = document.createElement('div');
@@ -190,7 +201,6 @@
 
     normalized.forEach(({ emoji, count, users }) => {
       const actualCount = (count !== undefined) ? count : users.length;
-      // Compare as strings — handles both ObjectId objects and plain strings
       const isMine = users && users.some((u) => String(u) === myUserId);
       const pill = document.createElement('button');
       pill.type = 'button';
@@ -202,17 +212,12 @@
       });
       bar.appendChild(pill);
     });
-
     wrapper.appendChild(bar);
   }
 
-
   // ── Render: chat message ──────────────────────────────────────────────────
   function renderMessage(msg, fromHistory = false) {
-    if (msg.deleted) {
-      // render deleted placeholder if from history (new deleted events handled by updateDeleted)
-      if (!fromHistory) return;
-    }
+    if (msg.deleted && !fromHistory) return;
 
     const isOwn = msg.username === myUsername;
     const grouped = shouldGroup(msg.username, msg.createdAt);
@@ -233,7 +238,6 @@
       wrapper.appendChild(sender);
     }
 
-    // ── Reply quote ────────────────────────────────────────────────────────
     if (msg.replySnapshot && msg.replySnapshot.username) {
       const quote = document.createElement('div');
       quote.className = 'reply-quote';
@@ -241,7 +245,6 @@
       wrapper.appendChild(quote);
     }
 
-    // ── Bubble ────────────────────────────────────────────────────────────
     const bubble = document.createElement('div');
     bubble.className = `message-bubble${msg.deleted ? ' message-bubble--deleted' : ''}`;
     if (msg.deleted) {
@@ -251,7 +254,6 @@
     }
     wrapper.appendChild(bubble);
 
-    // ── Time + edited label ───────────────────────────────────────────────
     const timeRow = document.createElement('div');
     timeRow.className = 'message-time';
     timeRow.textContent = formatTime(msg.createdAt);
@@ -263,22 +265,18 @@
     }
     wrapper.appendChild(timeRow);
 
-    // ── Reactions bar ─────────────────────────────────────────────────────
     if (!msg.deleted && msg.reactions && msg.reactions.length > 0) {
       renderReactionsBar(wrapper, msg.reactions, msg._id);
     }
 
-    // ── Action menu (visible on hover) ───────────────────────────────────
     if (!msg.deleted) {
       const actions = buildActionMenu(msg, isOwn, wrapper);
       wrapper.appendChild(actions);
     }
 
     messagesContainer.appendChild(wrapper);
-
     lastMessageUsername  = msg.username;
     lastMessageTimestamp = msg.createdAt;
-
     if (!fromHistory) scrollToBottom();
   }
 
@@ -288,7 +286,6 @@
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
 
-    // React button (opens emoji picker)
     const reactBtn = document.createElement('button');
     reactBtn.type = 'button';
     reactBtn.className = 'msg-action-btn';
@@ -300,7 +297,6 @@
     });
     actions.appendChild(reactBtn);
 
-    // Reply button
     const replyBtn = document.createElement('button');
     replyBtn.type = 'button';
     replyBtn.className = 'msg-action-btn';
@@ -312,7 +308,6 @@
     });
     actions.appendChild(replyBtn);
 
-    // Edit button (only own non-deleted messages)
     if (isOwn && !msg.deleted) {
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
@@ -323,7 +318,6 @@
       actions.appendChild(editBtn);
     }
 
-    // Delete button (own OR creator)
     const canDelete = isOwn || isCreator;
     if (canDelete && !msg.deleted) {
       const delBtn = document.createElement('button');
@@ -338,14 +332,11 @@
       });
       actions.appendChild(delBtn);
     }
-
     return actions;
   }
 
   function toggleReactionPicker(wrapper, msgId) {
-    // Close any existing pickers first
     document.querySelectorAll('.reaction-picker').forEach((p) => p.remove());
-
     const picker = document.createElement('div');
     picker.className = 'reaction-picker';
     EMOJIS.forEach((emoji) => {
@@ -361,10 +352,7 @@
       });
       picker.appendChild(btn);
     });
-
     wrapper.appendChild(picker);
-
-    // Close picker when clicking outside
     setTimeout(() => {
       document.addEventListener('click', function closePicker() {
         picker.remove();
@@ -376,8 +364,6 @@
   function startInlineEdit(wrapper, msg) {
     const bubble = wrapper.querySelector('.message-bubble');
     if (!bubble) return;
-
-    // Replace bubble content with textarea
     const originalText = msg.message;
     const textarea = document.createElement('textarea');
     textarea.className = 'msg-edit-area';
@@ -385,29 +371,23 @@
     textarea.rows = 1;
     textarea.style.height = 'auto';
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-
     const editActions = document.createElement('div');
     editActions.className = 'msg-edit-actions';
-
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'msg-edit-save';
     saveBtn.textContent = 'Save';
-
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'msg-edit-cancel';
     cancelBtn.textContent = 'Cancel';
-
     editActions.appendChild(cancelBtn);
     editActions.appendChild(saveBtn);
-
     bubble.innerHTML = '';
     bubble.appendChild(textarea);
     bubble.appendChild(editActions);
     textarea.focus();
     textarea.selectionStart = textarea.value.length;
-
     textarea.addEventListener('input', () => {
       textarea.style.height = 'auto';
       textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
@@ -416,16 +396,13 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveBtn.click(); }
       if (e.key === 'Escape') cancelBtn.click();
     });
-
     cancelBtn.addEventListener('click', () => {
       bubble.innerHTML = renderMentions(originalText, myUsername);
     });
-
     saveBtn.addEventListener('click', () => {
       const newText = textarea.value.trim();
       if (!newText || newText === originalText) { cancelBtn.click(); return; }
       if (socketRef) socketRef.emit('edit-message', { messageId: msg._id, newText });
-      // Optimistic update
       bubble.innerHTML = renderMentions(newText, myUsername);
       msg.message = newText;
     });
@@ -436,15 +413,12 @@
     return new Date(date) - new Date(lastMessageTimestamp) < 60_000;
   }
 
-  // ── Update existing message in DOM after edit ─────────────────────────────
   function updateEditedMessage({ _id, message }) {
     const wrapper = messagesContainer.querySelector(`[data-msg-id="${_id}"]`);
     if (!wrapper) return;
     const bubble = wrapper.querySelector('.message-bubble');
     if (!bubble || bubble.classList.contains('message-bubble--deleted')) return;
     bubble.innerHTML = renderMentions(message, myUsername);
-
-    // Add/update (edited) label in time row
     const timeRow = wrapper.querySelector('.message-time');
     if (timeRow && !timeRow.querySelector('.msg-edited-label')) {
       const lbl = document.createElement('span');
@@ -454,28 +428,23 @@
     }
   }
 
-  // ── Update existing message in DOM after delete ───────────────────────────
   function updateDeletedMessage({ _id }) {
     const wrapper = messagesContainer.querySelector(`[data-msg-id="${_id}"]`);
     if (!wrapper) return;
     const bubble = wrapper.querySelector('.message-bubble');
     if (!bubble) return;
     bubble.className = 'message-bubble message-bubble--deleted';
-    bubble.innerHTML = '🚫 Message deleted';
-
-    // Remove action menu and reactions
+    bubble.textContent = '🚫 Message deleted';
     wrapper.querySelector('.msg-actions')?.remove();
     wrapper.querySelector('.reactions-bar')?.remove();
   }
 
-  // ── Update reactions in DOM ───────────────────────────────────────────────
   function updateReactions({ _id, reactions }) {
     const wrapper = messagesContainer.querySelector(`[data-msg-id="${_id}"]`);
     if (!wrapper) return;
     renderReactionsBar(wrapper, reactions, _id);
   }
 
-  // ── Render: system message ────────────────────────────────────────────────
   function renderSystemMessage(text) {
     lastMessageUsername = null;
     const el = document.createElement('div');
@@ -485,115 +454,40 @@
     scrollToBottom();
   }
 
-  // ── Online users panel ────────────────────────────────────────────────────
-  function renderOnlineUsers(users) {
+  // ── Show Online Users ─────────────────────────────────────────────────────
+  function updateOnlineUsers(users) {
+    if (!userList) return;
     onlineUsersList = users;
     userList.innerHTML = '';
     userCountBadge.textContent = users.length;
 
-    users.forEach(({ username, userId, profilePic }) => {
+    users.forEach((u) => {
       const li = document.createElement('li');
       li.className = 'user-item';
-      const isSelf = username === myUsername;
+      const isMe = String(u.userId) === String(myUserId);
+      const displayUsername = isMe ? `${u.username} (You)` : u.username;
+      const color = avatarColor(u.username);
+      const initials = escapeHTML(u.username.slice(0, 2).toUpperCase());
+      const status = onlineUsersGlobal[u.userId]?.status || 'online';
 
-      let avatarHTML;
-      if (profilePic) {
-        avatarHTML = `<img src="${escapeHTML(profilePic)}" alt="${escapeHTML(username)}" class="user-avatar-img" />`;
-      } else {
-        const color = avatarColor(username);
-        avatarHTML = `<div class="user-avatar" style="background:${color};">${escapeHTML(username.slice(0,2).toUpperCase())}</div>`;
-      }
+      const avatarHtml = u.profilePic
+        ? `<img src="${escapeHTML(u.profilePic)}" alt="" class="user-avatar-img" />`
+        : `<div class="user-avatar" style="background:${color};" aria-hidden="true">${initials}</div>`;
 
-      let actionsHTML = '';
-      if (isCreator && !isSelf && userId) {
-        actionsHTML = `
-          <div class="user-action-buttons">
-            <button type="button" class="btn-user-action btn-kick" data-user-id="${userId}" data-username="${escapeHTML(username)}" title="Kick ${escapeHTML(username)}">Kick</button>
-            <button type="button" class="btn-user-action btn-ban" data-user-id="${userId}" data-username="${escapeHTML(username)}" title="Restrict ${escapeHTML(username)}">Restrict</button>
-          </div>
-        `;
-      }
+      const actionHtml = isMe ? '' : `
+        <a href="/dm.html?with=${escapeHTML(u.userId)}" class="btn-ghost" style="padding: 4px 8px; font-size: 0.75rem;" title="Direct Message">Message</a>
+      `;
 
       li.innerHTML = `
-        ${avatarHTML}
-        <span class="user-name ${isSelf ? 'user-name--self' : ''}">${escapeHTML(username)}${isSelf ? ' (you)' : ''}</span>
-        <span class="user-online-dot" aria-hidden="true"></span>
-        ${actionsHTML}
+        <div style="position:relative; display:inline-block;">
+          ${avatarHtml}
+          <span class="status-dot status-dot--${status}" style="position:absolute; bottom:0; right:0; width:10px; height:10px;"></span>
+        </div>
+        <span class="user-name ${isMe ? 'user-name--self' : ''}" title="${escapeHTML(u.username)}">${escapeHTML(displayUsername)}</span>
+        ${actionHtml}
       `;
       userList.appendChild(li);
     });
-
-    if (isCreator) {
-      userList.querySelectorAll('.btn-kick').forEach((btn) => {
-        btn.addEventListener('click', () => handleKickUser(btn.dataset.userId, btn.dataset.username));
-      });
-      userList.querySelectorAll('.btn-ban').forEach((btn) => {
-        btn.addEventListener('click', () => handleBanUser(btn.dataset.userId, btn.dataset.username));
-      });
-    }
-  }
-
-  async function handleKickUser(targetUserId, targetUsername) {
-    if (!confirm(`Are you sure you want to kick ${targetUsername} from the room?`)) return;
-    try {
-      await API.post(`/api/rooms/${roomId}/kick`, { targetUserId });
-    } catch (err) {
-      alert(err.message || 'Failed to kick user.');
-    }
-  }
-
-  async function handleBanUser(targetUserId, targetUsername) {
-    if (!confirm(`Are you sure you want to restrict ${targetUsername} from entering this room?`)) return;
-    try {
-      await API.post(`/api/rooms/${roomId}/ban`, { targetUserId });
-    } catch (err) {
-      alert(err.message || 'Failed to restrict user.');
-    }
-  }
-
-  // ── @Mention dropdown ─────────────────────────────────────────────────────
-  function showMentionDropdown(query) {
-    const filtered = onlineUsersList.filter(
-      (u) => u.username !== myUsername && u.username.toLowerCase().startsWith(query.toLowerCase())
-    );
-
-    if (!filtered.length) { mentionDropdown.hidden = true; return; }
-
-    mentionDropdown.innerHTML = '';
-    filtered.slice(0, 8).forEach((u, i) => {
-      const item = document.createElement('div');
-      item.className = `mention-item${i === 0 ? ' mention-item--active' : ''}`;
-      const color = avatarColor(u.username);
-      item.innerHTML = `<div class="mention-item-avatar" style="background:${color};">${escapeHTML(u.username.slice(0,2).toUpperCase())}</div><span class="mention-item-name">@${escapeHTML(u.username)}</span>`;
-      item.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        insertMention(u.username);
-      });
-      mentionDropdown.appendChild(item);
-    });
-
-    mentionDropdown.hidden = false;
-  }
-
-  function hideMentionDropdown() {
-    mentionDropdown.hidden = true;
-    mentionActive = false;
-    mentionSearch = '';
-  }
-
-  function insertMention(username) {
-    const val = messageInput.value;
-    const pos = messageInput.selectionStart;
-    // Find the @... being typed
-    const before = val.slice(0, pos);
-    const atIdx = before.lastIndexOf('@');
-    const newVal = val.slice(0, atIdx) + `@${username} ` + val.slice(pos);
-    messageInput.value = newVal;
-    const newPos = atIdx + username.length + 2;
-    messageInput.setSelectionRange(newPos, newPos);
-    hideMentionDropdown();
-    updateSendButton();
-    messageInput.focus();
   }
 
   // ── Connection status ─────────────────────────────────────────────────────
@@ -601,16 +495,12 @@
     statusDot.className = `status-dot status-dot--${state}`;
     const labels = { connected: 'Connected', reconnecting: 'Reconnecting…', disconnected: 'Disconnected' };
     statusText.textContent = labels[state] || state;
-
     if (state === 'connected') {
       connectionBanner.hidden = true;
-      connectionBanner.className = 'connection-banner';
-      updateSendButton();
     } else {
       connectionBanner.hidden = false;
       connectionBanner.className = `connection-banner connection-banner--${state}`;
       connectionBannerText.textContent = labels[state];
-      sendBtn.disabled = true;
     }
   }
 
@@ -622,7 +512,6 @@
       reconnectionAttempts: Infinity,
       reconnectionDelay:    1000,
       reconnectionDelayMax: 5000,
-      randomizationFactor:  0.3,
     });
     socketRef = socket;
 
@@ -633,9 +522,7 @@
 
     socket.on('disconnect',    () => setStatus('disconnected'));
     socket.on('connect_error', () => setStatus('reconnecting'));
-    socket.io.on('reconnect_attempt', () => setStatus('reconnecting'));
-    socket.io.on('reconnect',         () => setStatus('connected'));
-
+    
     socket.on('recent-messages', (messages) => {
       messagesContainer.innerHTML = '';
       lastRenderedDate = null; lastMessageUsername = null; lastMessageTimestamp = null;
@@ -645,23 +532,33 @@
 
     socket.on('receive-message', (msg) => {
       renderMessage(msg, false);
-      clearTypingFor(msg.username);
     });
 
-    // Phase 5 real-time events
     socket.on('message-edited',  (data) => updateEditedMessage(data));
     socket.on('message-deleted', (data) => updateDeletedMessage(data));
     socket.on('message-reacted', (data) => updateReactions(data));
 
     socket.on('user-joined', ({ message: msg }) => renderSystemMessage(msg));
     socket.on('user-left',   ({ message: msg }) => renderSystemMessage(msg));
-    socket.on('online-users', ({ users }) => renderOnlineUsers(users));
+    socket.on('online-users', ({ users }) => updateOnlineUsers(users));
+    
+    socket.on('user-status-changed', ({ userId, status }) => {
+      onlineUsersGlobal[userId] = { status };
+      updateOnlineUsers(onlineUsersList);
+    });
+
+    socket.on('friend-request-received', ({ from }) => {
+      showToast(`New friend request from ${escapeHTML(from.username)}`);
+    });
+
+    socket.on('dm-notification', (msg) => {
+      if (String(msg.userId) !== String(myUserId)) {
+        showToast(`New DM from ${escapeHTML(msg.username)}`);
+      }
+    });
+
     socket.on('error-message', ({ error }) => renderSystemMessage(`⚠ ${error}`));
 
-    // Creator / Management socket events
-    socket.on('room-deleted', ({ message: msg }) => {
-      alert(msg || 'This room has been deleted by the host.');
-      window.location.href = '/rooms.html';
     });
 
     socket.on('kicked-from-room', ({ message: msg }) => {

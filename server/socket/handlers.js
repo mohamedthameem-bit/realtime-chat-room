@@ -1,389 +1,248 @@
 /**
- * handlers.js — Socket.IO event logic and in-memory presence tracking (Phase 5).
- *
- * Phase 5 additions:
- *  - send-message now saves userId and replyTo + replySnapshot
- *  - New events: edit-message, delete-message, react-message
- *  - join-room updates UserRoomRead timestamp
+ * handlers.js — Socket.IO event logic (Phase 6).
  */
 
-const Message      = require('../models/Message');
-const Room         = require('../models/Room');
+const Message = require('../models/Message');
+const Room = require('../models/Room');
 const UserRoomRead = require('../models/UserRoomRead');
+const Conversation = require('../models/Conversation');
+const User = require('../models/User');
 const { validateMessage } = require('../middleware/validate');
 
 const ALLOWED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
-// In-memory store: roomId (string) → Map<socketId, { username, userId }>
+// In-memory store for room presences: roomId (string) → Map<socketId, { username, userId }>
 const rooms = new Map();
 
-/**
- * Get the list of user objects currently in a room (for the online users panel).
- * Returns: Array<{ username, profilePic }>
- */
 function getUsersInRoom(roomId) {
   const roomMap = rooms.get(roomId);
   if (!roomMap) return [];
   return Array.from(roomMap.values());
 }
 
-/**
- * Remove a socket from the in-memory presence map AND from Room.members in DB.
- * Broadcasts user-left + updated online-users to the room.
- */
 async function removeFromRoom(io, socket) {
   const { currentRoomId: roomId, currentUsername: username } = socket;
   if (!roomId || !username) return;
 
-  // Remove from in-memory presence
   const roomMap = rooms.get(roomId);
   if (roomMap) {
     roomMap.delete(socket.id);
     if (roomMap.size === 0) rooms.delete(roomId);
   }
 
-  // Remove from DB members array
   try {
-    await Room.findByIdAndUpdate(roomId, {
-      $pull: { members: socket.user._id },
-    });
-  } catch (err) {
-    console.error('[Socket] Failed to update room members on leave:', err.message);
-  }
+    await Room.findByIdAndUpdate(roomId, { $pull: { members: socket.user._id } });
+  } catch (err) {}
 
   const onlineUsers = getUsersInRoom(roomId);
-
   io.to(roomId).emit('user-left', {
     username,
     roomId,
     message: `${username} has left the room.`,
     createdAt: new Date(),
   });
-
   io.to(roomId).emit('online-users', { roomId, users: onlineUsers });
-
-  console.log(`[Socket] ${username} left room "${roomId}". Online: ${onlineUsers.length}`);
 }
 
-/**
- * Register all Socket.IO event handlers for a single authenticated socket.
- * socket.user is guaranteed to be set by socketAuth middleware.
- */
 function registerHandlers(io, socket) {
   const { username, _id: userId, profilePic } = socket.user;
-  console.log(`[Socket] Authenticated connection: ${username} (${socket.id})`);
+  const userIdStr = userId.toString();
 
-  // ------------------------------------------------------------------
-  // join-room
-  // Client sends: { roomId: string }
-  // ------------------------------------------------------------------
+  // Phase 6: Global user tracking
+  // Join a personal room to receive DMs and friend requests
+  socket.join(`user:${userIdStr}`);
+
+  // Broadcast that this user is online (only if they are not set to invisible)
+  if (socket.user.status !== 'invisible') {
+    io.emit('user-status-changed', { userId: userIdStr, status: socket.user.status });
+  }
+
   socket.on('join-room', async ({ roomId } = {}) => {
-    if (!roomId) {
-      socket.emit('error-message', { error: 'Room ID is required.' });
-      return;
-    }
+    if (!roomId) return socket.emit('error-message', { error: 'Room ID is required.' });
 
-    // Verify the room exists and the user is a member (join must happen via REST first)
     let room;
-    try {
-      room = await Room.findById(roomId).lean();
-    } catch (_) {
-      socket.emit('error-message', { error: 'Invalid room ID.' });
-      return;
-    }
+    try { room = await Room.findById(roomId).lean(); } catch (_) { return socket.emit('error-message', { error: 'Invalid room ID.' }); }
+    if (!room) return socket.emit('error-message', { error: 'Room not found.' });
 
-    if (!room) {
-      socket.emit('error-message', { error: 'Room not found.' });
-      return;
-    }
-
-    // Check that the user has been admitted via the REST /join endpoint
-    const isMember = room.members.some((m) => m.toString() === userId.toString());
-    if (!isMember) {
-      socket.emit('error-message', { error: 'You must join the room first.' });
-      return;
-    }
-
-    // Check if restricted/banned
-    if (room.bannedUsers && room.bannedUsers.some((b) => b.toString() === userId.toString())) {
-      socket.emit('error-message', { error: 'You have been restricted from entering this room by the host.' });
-      return;
+    const isMember = room.members.some((m) => m.toString() === userIdStr);
+    if (!isMember) return socket.emit('error-message', { error: 'You must join the room first.' });
+    if (room.bannedUsers && room.bannedUsers.some((b) => b.toString() === userIdStr)) {
+      return socket.emit('error-message', { error: 'Restricted from this room.' });
     }
 
     const roomIdStr = roomId.toString();
-
-    // Leave any previously joined room first
     if (socket.currentRoomId && socket.currentRoomId !== roomIdStr) {
       await removeFromRoom(io, socket);
       socket.leave(socket.currentRoomId);
     }
 
-    // Register presence
-    if (!rooms.has(roomIdStr)) {
-      rooms.set(roomIdStr, new Map());
-    }
-    rooms.get(roomIdStr).set(socket.id, {
-      username,
-      userId: userId.toString(),
-      profilePic: profilePic || '',
-    });
+    if (!rooms.has(roomIdStr)) rooms.set(roomIdStr, new Map());
+    rooms.get(roomIdStr).set(socket.id, { username, userId: userIdStr, profilePic: profilePic || '' });
 
-    socket.currentRoomId    = roomIdStr;
-    socket.currentRoomName  = room.name;
-    socket.currentUsername  = username;
-
+    socket.currentRoomId = roomIdStr;
+    socket.currentRoomName = room.name;
+    socket.currentUsername = username;
     socket.join(roomIdStr);
-    console.log(`[Socket] ${username} joined room "${room.name}" (${roomIdStr})`);
 
-    // Update last-read timestamp so unread count resets
     try {
-      await UserRoomRead.findOneAndUpdate(
-        { userId, roomId: roomIdStr },
-        { lastReadAt: new Date() },
-        { upsert: true, new: true }
-      );
-    } catch (err) {
-      console.error('[Socket] Failed to update UserRoomRead:', err.message);
-    }
-
-    // Send message history (last 50, oldest → newest)
-    try {
-      const recentMessages = await Message.find({ room: roomIdStr })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean();
-
+      await UserRoomRead.findOneAndUpdate({ userId, roomId: roomIdStr }, { lastReadAt: new Date() }, { upsert: true });
+      const recentMessages = await Message.find({ room: roomIdStr }).sort({ createdAt: -1 }).limit(50).lean();
       socket.emit('recent-messages', recentMessages.reverse());
-    } catch (err) {
-      console.error('[Socket] Failed to load recent messages:', err.message);
-      socket.emit('recent-messages', []);
-    }
+    } catch (err) {}
 
-    // Broadcast join event to everyone else
-    socket.to(roomIdStr).emit('user-joined', {
-      username,
-      roomId: roomIdStr,
-      message: `${username} has joined the room.`,
-      createdAt: new Date(),
-    });
-
-    // Send updated online users list to everyone
-    const onlineUsers = getUsersInRoom(roomIdStr);
-    io.to(roomIdStr).emit('online-users', { roomId: roomIdStr, users: onlineUsers });
+    socket.to(roomIdStr).emit('user-joined', { username, roomId: roomIdStr, message: `${username} has joined.`, createdAt: new Date() });
+    io.to(roomIdStr).emit('online-users', { roomId: roomIdStr, users: getUsersInRoom(roomIdStr) });
   });
 
-  // ------------------------------------------------------------------
-  // send-message
-  // Client sends: { message: string, replyToId?: string }
-  // ------------------------------------------------------------------
   socket.on('send-message', async ({ message, replyToId } = {}) => {
-    if (!socket.currentRoomId) {
-      socket.emit('error-message', { error: 'You must join a room before sending messages.' });
-      return;
-    }
-
+    if (!socket.currentRoomId) return socket.emit('error-message', { error: 'Must join a room.' });
     const msgCheck = validateMessage(message);
-    if (!msgCheck.valid) {
-      socket.emit('error-message', { error: msgCheck.error });
-      return;
-    }
+    if (!msgCheck.valid) return socket.emit('error-message', { error: msgCheck.error });
 
-    const trimmedMessage = message.trim();
     const roomId = socket.currentRoomId;
-
     try {
-      // Build message document
-      const msgData = {
-        username,
-        userId,
-        message: trimmedMessage,
-        room:    roomId,
-        createdAt: new Date(),
-      };
-
-      // Handle reply-to
+      const msgData = { username, userId, message: message.trim(), room: roomId, createdAt: new Date() };
       if (replyToId) {
         const parent = await Message.findById(replyToId).lean();
         if (parent && !parent.deleted) {
           msgData.replyTo = parent._id;
-          msgData.replySnapshot = {
-            username: parent.username,
-            message:  parent.deleted ? '[deleted]' : parent.message,
-          };
+          msgData.replySnapshot = { username: parent.username, message: parent.message };
         }
       }
-
       const saved = await Message.create(msgData);
+      io.to(roomId).emit('receive-message', { ...saved.toObject(), profilePic: profilePic || '' });
+    } catch (err) {}
+  });
 
-      const payload = {
-        _id:           saved._id.toString(),
-        username:      saved.username,
-        userId:        saved.userId ? saved.userId.toString() : null,
-        message:       saved.message,
-        room:          saved.room,
-        createdAt:     saved.createdAt,
-        profilePic:    profilePic || '',
-        replySnapshot: saved.replySnapshot || null,
-        reactions:     [],
+  // Phase 6: Direct Messaging
+  socket.on('join-dm', async ({ conversationId }) => {
+    if (!conversationId) return;
+    try {
+      const conv = await Conversation.findById(conversationId).lean();
+      if (conv && conv.participants.some(p => p.toString() === userIdStr)) {
+        socket.join(`dm:${conversationId}`);
+        socket.currentDmId = conversationId;
+      }
+    } catch (err) {}
+  });
+
+  socket.on('send-dm', async ({ conversationId, message, replyToId }) => {
+    if (!conversationId) return;
+    const msgCheck = validateMessage(message);
+    if (!msgCheck.valid) return socket.emit('error-message', { error: msgCheck.error });
+
+    try {
+      const conv = await Conversation.findById(conversationId).lean();
+      if (!conv || !conv.participants.some(p => p.toString() === userIdStr)) return;
+
+      const msgData = {
+        username,
+        userId,
+        message: message.trim(),
+        conversationId,
+        readBy: [userId], // I have read my own message
+        createdAt: new Date()
       };
 
-      io.to(roomId).emit('receive-message', payload);
-    } catch (err) {
-      console.error('[Socket] Failed to save message:', err.message);
-      socket.emit('error-message', { error: 'Failed to send message. Please try again.' });
-    }
-  });
-
-  // ------------------------------------------------------------------
-  // edit-message  (via socket for instant feedback)
-  // Client sends: { messageId: string, newText: string }
-  // ------------------------------------------------------------------
-  socket.on('edit-message', async ({ messageId, newText } = {}) => {
-    if (!socket.currentRoomId) return;
-
-    const text = (newText || '').trim();
-    if (!text || text.length > 500) {
-      socket.emit('error-message', { error: 'Message must be 1–500 characters.' });
-      return;
-    }
-
-    try {
-      const msg = await Message.findById(messageId);
-      if (!msg || msg.deleted) return;
-      if (!msg.userId || msg.userId.toString() !== userId.toString()) {
-        socket.emit('error-message', { error: 'You can only edit your own messages.' });
-        return;
-      }
-
-      msg.message  = text;
-      msg.edited   = true;
-      msg.editedAt = new Date();
-      await msg.save();
-
-      io.to(socket.currentRoomId).emit('message-edited', {
-        _id:      msg._id.toString(),
-        message:  msg.message,
-        editedAt: msg.editedAt,
-      });
-    } catch (err) {
-      console.error('[Socket] Failed to edit message:', err.message);
-    }
-  });
-
-  // ------------------------------------------------------------------
-  // delete-message (via socket for instant feedback)
-  // Client sends: { messageId: string }
-  // ------------------------------------------------------------------
-  socket.on('delete-message', async ({ messageId } = {}) => {
-    if (!socket.currentRoomId) return;
-
-    try {
-      const msg = await Message.findById(messageId);
-      if (!msg || msg.deleted) return;
-
-      const isAuthor = msg.userId && msg.userId.toString() === userId.toString();
-      let isRoomCreator = false;
-
-      if (!isAuthor) {
-        const room = await Room.findById(socket.currentRoomId).lean();
-        if (room && room.creator.toString() === userId.toString()) isRoomCreator = true;
-      }
-
-      if (!isAuthor && !isRoomCreator) {
-        socket.emit('error-message', { error: 'You do not have permission to delete this message.' });
-        return;
-      }
-
-      msg.deleted   = true;
-      msg.deletedAt = new Date();
-      msg.reactions = [];
-      await msg.save();
-
-      io.to(socket.currentRoomId).emit('message-deleted', { _id: msg._id.toString() });
-    } catch (err) {
-      console.error('[Socket] Failed to delete message:', err.message);
-    }
-  });
-
-  // ------------------------------------------------------------------
-  // react-message
-  // Client sends: { messageId: string, emoji: string }
-  // ------------------------------------------------------------------
-  socket.on('react-message', async ({ messageId, emoji } = {}) => {
-    if (!socket.currentRoomId) return;
-    if (!emoji || !ALLOWED_EMOJIS.includes(emoji)) return;
-
-    try {
-      const msg = await Message.findById(messageId);
-      if (!msg || msg.deleted) return;
-
-      const userIdStr = userId.toString();
-      let bucket = msg.reactions.find((r) => r.emoji === emoji);
-
-      if (bucket) {
-        const alreadyReacted = bucket.users.some((u) => u.toString() === userIdStr);
-        if (alreadyReacted) {
-          bucket.users = bucket.users.filter((u) => u.toString() !== userIdStr);
-          if (bucket.users.length === 0) {
-            msg.reactions = msg.reactions.filter((r) => r.emoji !== emoji);
-          }
-        } else {
-          bucket.users.push(userId);
+      if (replyToId) {
+        const parent = await Message.findById(replyToId).lean();
+        if (parent && !parent.deleted) {
+          msgData.replyTo = parent._id;
+          msgData.replySnapshot = { username: parent.username, message: parent.message };
         }
-      } else {
-        msg.reactions.push({ emoji, users: [userId] });
       }
+      const saved = await Message.create(msgData);
+      
+      const payload = {
+        ...saved.toObject(),
+        profilePic: profilePic || ''
+      };
 
-      msg.markModified('reactions');
-      await msg.save();
+      // Emit to the DM room
+      io.to(`dm:${conversationId}`).emit('receive-dm', payload);
 
-      const reactionsPayload = msg.reactions.map((r) => ({
-        emoji: r.emoji,
-        count: r.users.length,
-        users: r.users.map((u) => u.toString()),
-      }));
-
-      io.to(socket.currentRoomId).emit('message-reacted', {
-        _id:       msg._id.toString(),
-        reactions: reactionsPayload,
+      // Also emit to user's personal rooms to update unread badges
+      conv.participants.forEach(p => {
+        io.to(`user:${p.toString()}`).emit('dm-notification', payload);
       });
-    } catch (err) {
-      console.error('[Socket] Failed to react to message:', err.message);
-    }
+    } catch (err) {}
   });
 
-  // ------------------------------------------------------------------
-  // typing / stop-typing
-  // ------------------------------------------------------------------
+
+  socket.on('edit-message', async ({ messageId, newText } = {}) => {
+    const text = (newText || '').trim();
+    if (!text || text.length > 500) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted || msg.userId.toString() !== userIdStr) return;
+      msg.message = text; msg.edited = true; msg.editedAt = new Date(); await msg.save();
+      const target = msg.room ? msg.room : `dm:${msg.conversationId}`;
+      io.to(target).emit('message-edited', { _id: msg._id.toString(), message: msg.message, editedAt: msg.editedAt });
+    } catch (err) {}
+  });
+
+  socket.on('delete-message', async ({ messageId } = {}) => {
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+      
+      const isAuthor = msg.userId && msg.userId.toString() === userIdStr;
+      let isRoomCreator = false;
+      if (!isAuthor && msg.room) {
+        const room = await Room.findById(msg.room).lean();
+        if (room && room.creator.toString() === userIdStr) isRoomCreator = true;
+      }
+      if (!isAuthor && !isRoomCreator) return;
+      
+      msg.deleted = true; msg.deletedAt = new Date(); msg.reactions = []; await msg.save();
+      const target = msg.room ? msg.room : `dm:${msg.conversationId}`;
+      io.to(target).emit('message-deleted', { _id: msg._id.toString() });
+    } catch (err) {}
+  });
+
+  socket.on('react-message', async ({ messageId, emoji } = {}) => {
+    if (!emoji || !ALLOWED_EMOJIS.includes(emoji)) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+      
+      let bucket = msg.reactions.find((r) => r.emoji === emoji);
+      if (bucket) {
+        if (bucket.users.some((u) => u.toString() === userIdStr)) {
+          bucket.users = bucket.users.filter((u) => u.toString() !== userIdStr);
+          if (bucket.users.length === 0) msg.reactions = msg.reactions.filter((r) => r.emoji !== emoji);
+        } else bucket.users.push(userId);
+      } else msg.reactions.push({ emoji, users: [userId] });
+      
+      msg.markModified('reactions'); await msg.save();
+      const target = msg.room ? msg.room : `dm:${msg.conversationId}`;
+      io.to(target).emit('message-reacted', { _id: msg._id.toString(), reactions: msg.reactions.map(r => ({ emoji: r.emoji, count: r.users.length, users: r.users.map(u => u.toString()) })) });
+    } catch (err) {}
+  });
+
   socket.on('typing', () => {
-    if (socket.currentRoomId) {
-      socket.to(socket.currentRoomId).emit('typing', { username });
-    }
+    if (socket.currentRoomId) socket.to(socket.currentRoomId).emit('typing', { username });
+    if (socket.currentDmId) socket.to(`dm:${socket.currentDmId}`).emit('typing', { username });
   });
 
   socket.on('stop-typing', () => {
-    if (socket.currentRoomId) {
-      socket.to(socket.currentRoomId).emit('stop-typing', { username });
-    }
+    if (socket.currentRoomId) socket.to(socket.currentRoomId).emit('stop-typing', { username });
+    if (socket.currentDmId) socket.to(`dm:${socket.currentDmId}`).emit('stop-typing', { username });
   });
 
-  // ------------------------------------------------------------------
-  // leave-room (explicit button click)
-  // ------------------------------------------------------------------
   socket.on('leave-room', async () => {
     await removeFromRoom(io, socket);
     if (socket.currentRoomId) socket.leave(socket.currentRoomId);
-    socket.currentRoomId   = null;
-    socket.currentRoomName = null;
-    socket.currentUsername = null;
+    socket.currentRoomId = null; socket.currentRoomName = null; socket.currentUsername = null;
   });
 
-  // ------------------------------------------------------------------
-  // disconnect (tab close, network drop, etc.)
-  // ------------------------------------------------------------------
-  socket.on('disconnect', async (reason) => {
-    console.log(`[Socket] Disconnected: ${username} (${socket.id}) — reason: ${reason}`);
+  socket.on('disconnect', async () => {
     await removeFromRoom(io, socket);
+    // Let clients know they went offline (if they were online)
+    if (socket.user.status !== 'invisible') {
+       // Ideally we check if they have other active sockets, but for simplicity we just emit
+       io.emit('user-status-changed', { userId: userIdStr, status: 'offline' });
+    }
   });
 }
 

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Friends - ChatRoom</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .friends-container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+    .friends-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+    .tabs { display: flex; gap: 1rem; }
+    .tab-btn { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.5rem 1rem; border-radius: 8px; transition: 0.2s; position: relative; }
+    .tab-btn.active { color: var(--accent-light); background: rgba(108,99,255,0.1); font-weight: bold; }
+    .tab-btn .nav-badge { position: absolute; top: 0; right: 0; transform: translate(30%, -30%); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    
+    .request-list { display: flex; flex-direction: column; gap: 1rem; }
+    .request-card { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; display: flex; align-items: center; justify-content: space-between; }
+    .request-user { display: flex; align-items: center; gap: 1rem; }
+    .request-avatar { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; position: relative; }
+    .request-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .request-actions { display: flex; gap: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-main">
+      <div class="friends-container fade-up">
+        <div class="friends-header">
+          <h1>Friends</h1>
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="friends-tab">My Friends</button>
+            <button class="tab-btn" data-tab="requests-tab">
+              Requests <span id="local-requests-badge" class="nav-badge" style="display:none;">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="friends-tab" class="tab-pane active">
+          <div id="friends-grid" class="user-grid"></div>
+          <div id="friends-empty" class="empty-state" hidden>You don't have any friends yet. Use the search to find people!</div>
+        </div>
+
+        <div id="requests-tab" class="tab-pane">
+          <div id="requests-list" class="request-list"></div>
+          <div id="requests-empty" class="empty-state" hidden>No pending friend requests.</div>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <script src="/js/api.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/friends.js"></script>
+  <div id="toast-container"></div>
+</body>
+</html>

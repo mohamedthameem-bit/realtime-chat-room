@@ -16,6 +16,11 @@ router.use('/profile',  require('./profile'));
 // Mount Phase 5 message actions
 router.use('/messages', require('./messages'));
 
+// Mount Phase 6 social routes
+router.use('/dm', require('./dm'));
+router.use('/users', require('./users'));
+router.use('/friends', require('./friends'));
+
 // GET /api/health — public, no auth required
 router.get('/health', healthCheck);
 

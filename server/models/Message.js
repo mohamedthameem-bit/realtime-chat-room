@@ -30,11 +30,16 @@ const messageSchema = new mongoose.Schema(
     },
     room: {
       type: String,
-      required: [true, 'Room name is required'],
       trim: true,
       lowercase: true,
       default: 'general',
+      // In Phase 6, room is optional if conversationId is set
     },
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Conversation',
+    },
+    readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     createdAt: {
       type: Date,
       default: Date.now,

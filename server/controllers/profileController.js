@@ -130,4 +130,36 @@ async function uploadAvatar(req, res, next) {
   }
 }
 
-module.exports = { getProfile, updateProfile, uploadAvatar };
+/**
+ * PATCH /api/profile/status
+ * Update user's online status.
+ */
+async function updateStatus(req, res, next) {
+  try {
+    const { status } = req.body;
+    const allowedStatuses = ['online', 'away', 'busy', 'invisible'];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status.' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user._id, { status }, { new: true }).lean();
+
+    // Broadcast status change
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('user-status-changed', { userId: user._id, status: user.status });
+    }
+
+    return res.json({ success: true, status: user.status });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  getProfile,
+  updateProfile,
+  uploadAvatar,
+  updateStatus,
+};

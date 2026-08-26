@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Users - ChatRoom</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .search-container { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    .search-header { margin-bottom: 2rem; }
+    .search-input-wrapper { position: relative; }
+    .search-input-icon { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    .search-input { width: 100%; padding: 1rem 1rem 1rem 3rem; font-size: 1.1rem; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-light); }
+    .search-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,99,255,0.2); }
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-main">
+      <div class="search-container fade-up">
+        <div class="search-header">
+          <h1>Find Users</h1>
+          <p class="text-muted">Search for friends and other members by username.</p>
+        </div>
+        
+        <div class="search-input-wrapper">
+          <svg class="search-input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" class="search-input" placeholder="Type a username..." autofocus>
+        </div>
+
+        <div id="search-results" class="user-grid"></div>
+        <div id="search-empty" class="empty-state" hidden>No users found. Try a different search term.</div>
+      </div>
+    </main>
+  </div>
+  
+  <script src="/js/api.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/search.js"></script>
+  <div id="toast-container"></div>
+</body>
+</html>
