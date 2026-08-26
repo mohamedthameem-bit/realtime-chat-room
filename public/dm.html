@@ -34,6 +34,12 @@
               <span id="header-status" style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">Connecting...</span>
             </div>
           </div>
+
+          <div class="header-actions" style="display: flex; gap: 0.5rem; margin-left: auto;">
+            <button id="call-btn" class="icon-btn" aria-label="Start Voice Call" title="Voice Call" style="color: var(--text-primary); transition: color var(--transition-fast);">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+          </div>
         </header>
 
         <main id="messages-container" class="messages-container" aria-label="Chat messages" aria-live="polite"></main>
@@ -69,6 +75,36 @@
             </form>
           </footer>
         </div>
+      </div>
+    </div>
+
+    <!-- ═══ INCOMING CALL MODAL ═══ -->
+    <div id="incoming-call-modal" class="modal-backdrop" role="dialog" aria-modal="true" hidden style="z-index: 1000; display: flex; align-items: center; justify-content: center;">
+      <div class="modal-card" style="text-align: center; max-width: 320px;">
+        <div class="call-avatar-ring" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 1rem; border: 3px solid var(--accent); position: relative;">
+          <div id="incoming-call-avatar" style="width: 100%; height: 100%; border-radius: 50%; overflow: hidden;"></div>
+        </div>
+        <h3 id="incoming-call-name" style="margin-bottom: 0.5rem; font-size: 1.25rem;">Caller Name</h3>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Incoming Voice Call...</p>
+        <div style="display: flex; gap: 1rem; justify-content: center;">
+          <button id="reject-call-btn" class="btn-leave" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); flex: 1;">Decline</button>
+          <button id="accept-call-btn" class="btn-primary" style="background: #10b981; flex: 1; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);">Accept</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ ACTIVE CALL WIDGET ═══ -->
+    <div id="active-call-widget" class="active-call-widget" hidden style="position: absolute; top: 70px; right: 20px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem; box-shadow: var(--shadow-lg); z-index: 900; display: flex; flex-direction: column; align-items: center; gap: 0.75rem; min-width: 200px;">
+      <div style="font-size: 0.85rem; color: var(--accent-light); font-weight: 600;" id="call-status-text">Connecting...</div>
+      <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums;" id="call-duration">00:00</div>
+      <audio id="remote-audio" autoplay></audio>
+      <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+        <button id="mute-call-btn" class="icon-btn" style="background: var(--bg-elevated); border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border);" title="Mute/Unmute">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="mic-icon"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
+        <button id="end-call-btn" class="icon-btn" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" title="End Call">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+        </button>
       </div>
     </div>
 

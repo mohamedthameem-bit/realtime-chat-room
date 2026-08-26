@@ -93,6 +93,13 @@
   const replyCancelBtn       = document.getElementById('reply-cancel-btn');
   const mentionDropdown      = document.getElementById('mention-dropdown');
 
+  // WebRTC DOM
+  const joinVoiceBtn         = document.getElementById('join-voice-btn');
+  const leaveVoiceBtn        = document.getElementById('leave-voice-btn');
+  const voiceList            = document.getElementById('voice-list');
+  const voiceCountBadge      = document.getElementById('voice-count-badge');
+  const voiceAudios          = document.getElementById('voice-audios');
+
   // ── State ──────────────────────────────────────────────────────────────────
   let myUsername   = null;
   let myUserId     = null;
@@ -559,6 +566,10 @@
 
     socket.on('error-message', ({ error }) => renderSystemMessage(`⚠ ${error}`));
 
+    if (typeof registerVoiceSockets === 'function') {
+      registerVoiceSockets(socket);
+    }
+
     });
 
     socket.on('kicked-from-room', ({ message: msg }) => {
@@ -870,6 +881,183 @@
   sidebarCloseBtn.addEventListener('click', () => { document.body.classList.remove('sidebar-open'); sidebarToggleBtn.setAttribute('aria-expanded', false); });
   sidebarOverlay.addEventListener('click',  () => { document.body.classList.remove('sidebar-open'); sidebarToggleBtn.setAttribute('aria-expanded', false); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { document.body.classList.remove('sidebar-open'); } });
+
+  // ── WebRTC Voice Mesh Implementation ──────────────────────────────────────
+  let voiceConnections = {}; // targetUserId -> RTCPeerConnection
+  let voiceStreams = {};     // targetUserId -> MediaStream
+  let localVoiceStream = null;
+  let inVoice = false;
+
+  const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+  function renderVoiceParticipants(participants) {
+    voiceList.innerHTML = '';
+    voiceCountBadge.textContent = participants.length;
+    participants.forEach(p => {
+      const li = document.createElement('li');
+      li.className = 'user-item';
+      
+      const avatarDiv = document.createElement('div');
+      avatarDiv.className = 'user-item-avatar';
+      if (p.profilePic) {
+        avatarDiv.innerHTML = `<img src="${escapeHTML(p.profilePic)}" alt="">`;
+      } else {
+        const color = avatarColor(p.username);
+        const initials = escapeHTML(p.username.slice(0, 2).toUpperCase());
+        avatarDiv.innerHTML = `<div style="width:100%; height:100%; background:${color}; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:0.8rem;">${initials}</div>`;
+      }
+      
+      // glowing ring indicator
+      avatarDiv.style.border = '2px solid #10b981';
+      avatarDiv.style.boxShadow = '0 0 5px rgba(16, 185, 129, 0.5)';
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'user-item-text';
+      const nameSpan = document.createElement('div');
+      nameSpan.className = 'user-item-name';
+      nameSpan.textContent = p.username;
+      if (p.userId === myUserId) nameSpan.textContent += ' (You)';
+
+      textDiv.appendChild(nameSpan);
+      li.appendChild(avatarDiv);
+      li.appendChild(textDiv);
+      voiceList.appendChild(li);
+    });
+  }
+
+  async function startVoice() {
+    try {
+      localVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      inVoice = true;
+      joinVoiceBtn.hidden = true;
+      leaveVoiceBtn.hidden = false;
+      socketRef.emit('join-voice');
+      renderSystemMessage('You joined the voice channel.');
+    } catch (err) {
+      alert('Microphone access is required to join voice.');
+    }
+  }
+
+  function stopVoice() {
+    inVoice = false;
+    joinVoiceBtn.hidden = false;
+    leaveVoiceBtn.hidden = true;
+    socketRef.emit('leave-voice');
+    
+    if (localVoiceStream) {
+      localVoiceStream.getTracks().forEach(t => t.stop());
+      localVoiceStream = null;
+    }
+    
+    Object.values(voiceConnections).forEach(pc => pc.close());
+    voiceConnections = {};
+    voiceStreams = {};
+    voiceAudios.innerHTML = '';
+    renderVoiceParticipants([]);
+    renderSystemMessage('You left the voice channel.');
+  }
+
+  function createPeerConnection(targetUserId) {
+    const pc = new RTCPeerConnection(ICE_SERVERS);
+    voiceConnections[targetUserId] = pc;
+    
+    if (localVoiceStream) {
+      localVoiceStream.getTracks().forEach(t => pc.addTrack(t, localVoiceStream));
+    }
+    
+    pc.ontrack = (event) => {
+      let audio = document.getElementById(`audio-${targetUserId}`);
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = `audio-${targetUserId}`;
+        audio.autoplay = true;
+        voiceAudios.appendChild(audio);
+      }
+      audio.srcObject = event.streams[0];
+    };
+    
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketRef.emit('room-voice-ice-candidate', { targetUserId, candidate: event.candidate });
+      }
+    };
+    
+    return pc;
+  }
+
+  if (joinVoiceBtn) joinVoiceBtn.addEventListener('click', startVoice);
+  if (leaveVoiceBtn) leaveVoiceBtn.addEventListener('click', stopVoice);
+
+  window.registerVoiceSockets = function(socket) {
+    let currentVoiceParticipants = [];
+    
+    function addParticipant(userId, username, profilePic) {
+      if (!currentVoiceParticipants.some(p => p.userId === userId)) {
+        currentVoiceParticipants.push({ userId, username, profilePic });
+        renderVoiceParticipants(currentVoiceParticipants);
+      }
+    }
+    function removeParticipant(userId) {
+      currentVoiceParticipants = currentVoiceParticipants.filter(p => p.userId !== userId);
+      renderVoiceParticipants(currentVoiceParticipants);
+      if (voiceConnections[userId]) {
+        voiceConnections[userId].close();
+        delete voiceConnections[userId];
+      }
+      const audio = document.getElementById(`audio-${userId}`);
+      if (audio) audio.remove();
+    }
+
+    socket.on('user-joined-voice', async ({ userId, username, profilePic }) => {
+      addParticipant(userId, username, profilePic);
+      if (!inVoice || userId === myUserId) return;
+      
+      const pc = createPeerConnection(userId);
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('room-voice-offer', { targetUserId: userId, offer });
+      } catch (err) { console.error('Create offer error:', err); }
+    });
+
+    socket.on('user-left-voice', ({ userId }) => {
+      removeParticipant(userId);
+    });
+
+    socket.on('room-voice-offer', async ({ callerId, callerName, offer }) => {
+      if (!inVoice) return;
+      // We don't have their profilePic in this payload, but they are in the room, so it's fine.
+      addParticipant(callerId, callerName, null);
+      
+      const pc = createPeerConnection(callerId);
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('room-voice-answer', { targetUserId: callerId, answer });
+      } catch (err) { console.error('Answer error:', err); }
+    });
+
+    socket.on('room-voice-answer', async ({ answererId, answer }) => {
+      if (!inVoice) return;
+      const pc = voiceConnections[answererId];
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (err) { console.error('Set remote desc error:', err); }
+      }
+    });
+
+    socket.on('room-voice-ice-candidate', async ({ senderId, candidate }) => {
+      if (!inVoice) return;
+      const pc = voiceConnections[senderId];
+      if (pc) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) { console.error('Add ICE candidate error:', err); }
+      }
+    });
+  };
 
   init();
 })();

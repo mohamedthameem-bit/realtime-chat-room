@@ -23,6 +23,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const replyPreviewAuthor= document.getElementById('reply-preview-author');
   const replyCancelBtn    = document.getElementById('reply-cancel-btn');
 
+  // WebRTC DOM
+  const callBtn            = document.getElementById('call-btn');
+  const incomingCallModal  = document.getElementById('incoming-call-modal');
+  const incomingCallAvatar = document.getElementById('incoming-call-avatar');
+  const incomingCallName   = document.getElementById('incoming-call-name');
+  const acceptCallBtn      = document.getElementById('accept-call-btn');
+  const rejectCallBtn      = document.getElementById('reject-call-btn');
+  const activeCallWidget   = document.getElementById('active-call-widget');
+  const callStatusText     = document.getElementById('call-status-text');
+  const callDurationEl     = document.getElementById('call-duration');
+  const remoteAudio        = document.getElementById('remote-audio');
+  const muteCallBtn        = document.getElementById('mute-call-btn');
+  const endCallBtn         = document.getElementById('end-call-btn');
+  const micIcon            = document.getElementById('mic-icon');
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
   function escapeHTML(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -452,6 +467,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     socket.on('error-message', ({ error }) => renderSystemMessage(`⚠ ${error}`));
+
+    if (typeof registerWebrtcSockets === 'function') {
+      registerWebrtcSockets(socket);
+    }
   }
 
   async function loadMessages() {
@@ -536,6 +555,224 @@ document.addEventListener('DOMContentLoaded', async () => {
     isTyping = false;
     socketRef.emit('stop-typing');
   });
+
+  // ── WebRTC Implementation ──────────────────────────────────────────────────
+  let peerConnection = null;
+  let localStream = null;
+  let callInterval = null;
+  let callSeconds = 0;
+  let isMuted = false;
+  let inCall = false;
+
+  const ICE_SERVERS = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+  function formatDuration(sec) {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function startCallTimer() {
+    clearInterval(callInterval);
+    callSeconds = 0;
+    callDurationEl.textContent = '00:00';
+    callInterval = setInterval(() => {
+      callSeconds++;
+      callDurationEl.textContent = formatDuration(callSeconds);
+    }, 1000);
+  }
+
+  function stopCallTimer() {
+    clearInterval(callInterval);
+  }
+
+  function cleanupCall() {
+    inCall = false;
+    stopCallTimer();
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    activeCallWidget.hidden = true;
+    incomingCallModal.hidden = true;
+    remoteAudio.srcObject = null;
+  }
+
+  async function getLocalMedia() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      return true;
+    } catch (err) {
+      alert('Microphone access is required for calls.');
+      return false;
+    }
+  }
+
+  function createPeerConnection() {
+    peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    
+    peerConnection.ontrack = (event) => {
+      remoteAudio.srcObject = event.streams[0];
+    };
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate && socketRef) {
+        socketRef.emit('dm-call-ice-candidate', { targetUserId, candidate: event.candidate });
+      }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+      if (peerConnection.connectionState === 'connected') {
+        callStatusText.textContent = 'Connected';
+        callStatusText.style.color = '#10b981';
+        startCallTimer();
+      } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+        endCall();
+      }
+    };
+  }
+
+  function showActiveCallWidget() {
+    activeCallWidget.hidden = false;
+    callStatusText.textContent = 'Calling...';
+    callStatusText.style.color = 'var(--accent-light)';
+    callDurationEl.textContent = '00:00';
+    isMuted = false;
+    updateMicIcon();
+  }
+
+  function updateMicIcon() {
+    if (isMuted) {
+      micIcon.innerHTML = `<line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>`;
+      muteCallBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+      muteCallBtn.style.color = '#f87171';
+    } else {
+      micIcon.innerHTML = `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>`;
+      muteCallBtn.style.background = 'var(--bg-elevated)';
+      muteCallBtn.style.color = 'var(--text-primary)';
+    }
+  }
+
+  async function initiateCall() {
+    if (inCall) return;
+    if (!await getLocalMedia()) return;
+    inCall = true;
+    showActiveCallWidget();
+    createPeerConnection();
+
+    try {
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      socketRef.emit('dm-call-offer', { targetUserId, offer });
+    } catch (err) {
+      console.error('Call error:', err);
+      cleanupCall();
+    }
+  }
+
+  async function acceptCall(offer) {
+    if (!await getLocalMedia()) {
+      socketRef.emit('dm-call-rejected', { targetUserId });
+      return;
+    }
+    incomingCallModal.hidden = true;
+    inCall = true;
+    showActiveCallWidget();
+    createPeerConnection();
+
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socketRef.emit('dm-call-answer', { targetUserId, answer });
+    } catch (err) {
+      console.error('Answer error:', err);
+      cleanupCall();
+    }
+  }
+
+  function endCall() {
+    if (!inCall) return;
+    socketRef.emit('dm-call-ended', { targetUserId });
+    cleanupCall();
+    showToast('Call ended');
+  }
+
+  // Bind Buttons
+  if (callBtn) callBtn.addEventListener('click', initiateCall);
+  if (muteCallBtn) {
+    muteCallBtn.addEventListener('click', () => {
+      if (localStream) {
+        isMuted = !isMuted;
+        localStream.getAudioTracks()[0].enabled = !isMuted;
+        updateMicIcon();
+      }
+    });
+  }
+  if (endCallBtn) endCallBtn.addEventListener('click', endCall);
+
+  let pendingOffer = null;
+  if (rejectCallBtn) {
+    rejectCallBtn.addEventListener('click', () => {
+      incomingCallModal.hidden = true;
+      socketRef.emit('dm-call-rejected', { targetUserId });
+      pendingOffer = null;
+    });
+  }
+  if (acceptCallBtn) {
+    acceptCallBtn.addEventListener('click', () => {
+      if (pendingOffer) acceptCall(pendingOffer);
+    });
+  }
+
+  // Socket Handlers
+  window.registerWebrtcSockets = function(socket) {
+    socket.on('dm-call-incoming', ({ callerName, offer }) => {
+      if (inCall) {
+        socket.emit('dm-call-rejected', { targetUserId });
+        return;
+      }
+      pendingOffer = offer;
+      incomingCallName.textContent = callerName;
+      if (targetUser && targetUser.profilePic) {
+        incomingCallAvatar.innerHTML = `<img src="${escapeHTML(targetUser.profilePic)}" alt="">`;
+      } else {
+        const color = avatarColor(callerName);
+        const initials = escapeHTML(callerName.slice(0, 2).toUpperCase());
+        incomingCallAvatar.innerHTML = `<div style="width:100%; height:100%; background:${color}; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:2rem;">${initials}</div>`;
+      }
+      incomingCallModal.hidden = false;
+    });
+
+    socket.on('dm-call-answered', async ({ answer }) => {
+      if (!peerConnection) return;
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (err) { console.error('Set remote desc error:', err); }
+    });
+
+    socket.on('dm-call-ice-candidate', async ({ candidate }) => {
+      if (!peerConnection) return;
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) { console.error('Add ICE candidate error:', err); }
+    });
+
+    socket.on('dm-call-rejected', () => {
+      showToast('Call declined');
+      cleanupCall();
+    });
+
+    socket.on('dm-call-ended', () => {
+      if (inCall) showToast('Call ended');
+      cleanupCall();
+    });
+  };
 
   init();
 });

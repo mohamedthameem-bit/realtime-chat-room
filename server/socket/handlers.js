@@ -220,6 +220,46 @@ function registerHandlers(io, socket) {
     } catch (err) {}
   });
 
+  // ── Phase 7: WebRTC Voice Calls Signaling ──
+
+  // 1-on-1 DM Calling
+  socket.on('dm-call-offer', ({ targetUserId, offer }) => {
+    io.to(`user:${targetUserId}`).emit('dm-call-incoming', { callerId: userIdStr, callerName: username, offer });
+  });
+  socket.on('dm-call-answer', ({ targetUserId, answer }) => {
+    io.to(`user:${targetUserId}`).emit('dm-call-answered', { answer });
+  });
+  socket.on('dm-call-ice-candidate', ({ targetUserId, candidate }) => {
+    io.to(`user:${targetUserId}`).emit('dm-call-ice-candidate', { candidate });
+  });
+  socket.on('dm-call-rejected', ({ targetUserId }) => {
+    io.to(`user:${targetUserId}`).emit('dm-call-rejected');
+  });
+  socket.on('dm-call-ended', ({ targetUserId }) => {
+    io.to(`user:${targetUserId}`).emit('dm-call-ended');
+  });
+
+  // Group Room Voice Mesh Networking
+  socket.on('join-voice', () => {
+    if (!socket.currentRoomId) return;
+    socket.inVoiceRoom = true;
+    socket.to(socket.currentRoomId).emit('user-joined-voice', { userId: userIdStr, username, profilePic: profilePic || '' });
+  });
+  socket.on('leave-voice', () => {
+    if (!socket.currentRoomId) return;
+    socket.inVoiceRoom = false;
+    socket.to(socket.currentRoomId).emit('user-left-voice', { userId: userIdStr });
+  });
+  socket.on('room-voice-offer', ({ targetUserId, offer }) => {
+    io.to(`user:${targetUserId}`).emit('room-voice-offer', { callerId: userIdStr, callerName: username, offer });
+  });
+  socket.on('room-voice-answer', ({ targetUserId, answer }) => {
+    io.to(`user:${targetUserId}`).emit('room-voice-answer', { answererId: userIdStr, answer });
+  });
+  socket.on('room-voice-ice-candidate', ({ targetUserId, candidate }) => {
+    io.to(`user:${targetUserId}`).emit('room-voice-ice-candidate', { senderId: userIdStr, candidate });
+  });
+
   socket.on('typing', () => {
     if (socket.currentRoomId) socket.to(socket.currentRoomId).emit('typing', { username });
     if (socket.currentDmId) socket.to(`dm:${socket.currentDmId}`).emit('typing', { username });
@@ -232,11 +272,20 @@ function registerHandlers(io, socket) {
 
   socket.on('leave-room', async () => {
     await removeFromRoom(io, socket);
-    if (socket.currentRoomId) socket.leave(socket.currentRoomId);
+    if (socket.currentRoomId) {
+      if (socket.inVoiceRoom) {
+        socket.to(socket.currentRoomId).emit('user-left-voice', { userId: userIdStr });
+        socket.inVoiceRoom = false;
+      }
+      socket.leave(socket.currentRoomId);
+    }
     socket.currentRoomId = null; socket.currentRoomName = null; socket.currentUsername = null;
   });
 
   socket.on('disconnect', async () => {
+    if (socket.inVoiceRoom && socket.currentRoomId) {
+      socket.to(socket.currentRoomId).emit('user-left-voice', { userId: userIdStr });
+    }
     await removeFromRoom(io, socket);
     // Let clients know they went offline (if they were online)
     if (socket.user.status !== 'invisible') {
