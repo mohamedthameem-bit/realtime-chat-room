@@ -46,6 +46,9 @@ const API = (() => {
     get:  (url)          => request(url, { method: 'GET' }),
     post: (url, body)    => request(url, { method: 'POST', body: JSON.stringify(body) }),
     put:  (url, body)    => request(url, { method: 'PUT',  body: JSON.stringify(body) }),
+    patch: (url, body)   => request(url, { method: 'PATCH', body: JSON.stringify(body) }),
+    delete: (url)        => request(url, { method: 'DELETE' }),
+
 
     /**
      * POST with FormData (for file uploads — no Content-Type override).
