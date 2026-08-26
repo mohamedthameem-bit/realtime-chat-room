@@ -1,82 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DM - ChatRoom</title>
-  <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-  <!-- Mobile Header (outside Sidebar) -->
-  <div class="mobile-room-header">
-    <a href="/dms.html" class="mobile-back-btn" aria-label="Back to DMs">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-    </a>
-    <div id="mobile-header-avatar" class="mobile-header-avatar"></div>
-    <div class="mobile-header-info">
-      <div id="mobile-header-name" class="mobile-header-name">Loading...</div>
-      <div id="mobile-header-status" class="mobile-header-status">Connecting...</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DM - ChatRoom</title>
+    <meta name="description" content="Direct Message" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body class="chat-page">
+
+    <!-- Connection status banner -->
+    <div id="connection-banner" class="connection-banner" role="status" aria-live="polite" hidden>
+      <span class="banner-dot" aria-hidden="true"></span>
+      <span id="connection-text">Reconnecting…</span>
     </div>
-  </div>
 
-  <div class="app-layout">
-    <main class="app-main chat-main">
-      <!-- Connection Banner -->
-      <div id="connection-banner" class="connection-banner" hidden>
-        <div class="spinner"></div>
-        <span id="connection-text">Connecting...</span>
-      </div>
+    <div class="chat-layout">
+      <!-- ═══ MAIN CHAT ═══ -->
+      <div class="chat-main">
+        <header class="chat-header">
+          <!-- Back button (mainly for mobile to go back to DMs list) -->
+          <a href="/dms.html" class="icon-btn" aria-label="Back to DMs" style="margin-right: 0.5rem; text-decoration: none; color: var(--text-secondary);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </a>
 
-      <!-- Chat Header (Desktop) -->
-      <header class="chat-header fade-in">
-        <div class="chat-header-info">
-          <div id="header-avatar" class="chat-header-avatar"></div>
-          <div>
-            <h2 id="header-name" class="chat-header-name" style="display:flex; align-items:center; gap:0.5rem;">
-              Loading...
-            </h2>
-            <div id="header-status" class="chat-header-meta">Connecting...</div>
-          </div>
-        </div>
-      </header>
-
-      <!-- Messages Area -->
-      <div id="messages-container" class="messages-container fade-up">
-        <!-- Messages injected here -->
-      </div>
-
-      <!-- Chat Input Area -->
-      <div class="chat-input-wrapper fade-up">
-        <form id="chat-form" class="chat-form">
-          <div id="reply-preview-bar" class="reply-preview-bar" hidden>
-            <div class="reply-preview-content">
-              <span class="reply-preview-author" id="reply-preview-author"></span>
-              <span class="reply-preview-text" id="reply-preview-text"></span>
+          <div class="chat-header-title" style="flex: 1;">
+            <div id="header-avatar" class="header-avatar" aria-hidden="true" style="margin-right: 0.75rem;"></div>
+            <div style="display: flex; flex-direction: column;">
+              <span id="header-name" class="header-room-name" style="font-size: 1.1rem;">Loading...</span>
+              <span id="header-status" style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">Connecting...</span>
             </div>
-            <button type="button" id="reply-cancel-btn" class="reply-cancel-btn" title="Cancel reply">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
           </div>
-          
-          <div class="chat-input-inner">
-            <textarea id="message-input" class="chat-input" placeholder="Message..." rows="1" autocomplete="off"></textarea>
-            
-            <button type="submit" id="send-btn" class="send-btn" aria-label="Send message" disabled>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-            </button>
-          </div>
-        </form>
-      </div>
-    </main>
-  </div>
+        </header>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/api.js"></script>
-  <script src="/js/sidebar.js"></script>
-  <script src="/js/dm.js"></script>
-  <div id="toast-container"></div>
-</body>
+        <main id="messages-container" class="messages-container" aria-label="Chat messages" aria-live="polite"></main>
+
+        <div class="typing-indicator" id="typing-indicator" aria-live="polite" hidden>
+          <span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span id="typing-text" class="typing-text"></span>
+        </div>
+
+        <!-- ═══ REPLY PREVIEW BAR ═══ -->
+        <div id="reply-preview-bar" class="reply-preview-bar" hidden>
+          <svg class="reply-preview-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+          <span class="reply-preview-content">
+            <span class="reply-preview-name" id="reply-preview-author"></span>
+            <span class="reply-preview-text" id="reply-preview-text"></span>
+          </span>
+          <button type="button" id="reply-cancel-btn" class="reply-preview-cancel" aria-label="Cancel reply">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- ═══ MESSAGE INPUT FOOTER ═══ -->
+        <div style="position: relative;">
+          <footer class="message-input-bar">
+            <form id="chat-form" class="message-input-wrapper" style="width: 100%; display: flex; align-items: flex-end; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 0.5rem 0.5rem 0.5rem 1rem; margin: 0; box-shadow: 0 4px 20px rgba(0,0,0,0.2); transition: border-color var(--transition-fast), box-shadow var(--transition-fast);">
+              <textarea id="message-input" class="message-input" placeholder="Message..." rows="1" maxlength="500" aria-label="Message input" style="flex: 1; min-height: 24px; max-height: 120px; border: none; background: transparent; color: var(--text-primary); font-size: 0.95rem; resize: none; padding: 0.25rem 0; outline: none; line-height: 1.5;"></textarea>
+              <div class="input-actions" style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; margin-left: 0.5rem; padding-bottom: 0.125rem;">
+                <span id="char-counter" class="char-counter" aria-live="polite" style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">0 / 500</span>
+                <button type="submit" id="send-btn" class="send-btn" aria-label="Send message" disabled style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--accent); color: #fff; transition: background var(--transition-fast), transform var(--transition-fast);">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: -2px;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            </form>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/dm.js"></script>
+
+    <!-- ═══ TOAST CONTAINER ═══ -->
+    <div id="toast-container"></div>
+  </body>
 </html>

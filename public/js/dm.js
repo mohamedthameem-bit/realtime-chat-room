@@ -12,13 +12,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const sendBtn           = document.getElementById('send-btn');
   const connectionBanner  = document.getElementById('connection-banner');
   const connectionText    = document.getElementById('connection-text');
+  const charCounter       = document.getElementById('char-counter');
 
   const headerAvatar      = document.getElementById('header-avatar');
   const headerName        = document.getElementById('header-name');
   const headerStatus      = document.getElementById('header-status');
-  const mobHeaderAvatar   = document.getElementById('mobile-header-avatar');
-  const mobHeaderName     = document.getElementById('mobile-header-name');
-  const mobHeaderStatus   = document.getElementById('mobile-header-status');
 
   const replyPreviewBar   = document.getElementById('reply-preview-bar');
   const replyPreviewText  = document.getElementById('reply-preview-text');
@@ -125,15 +123,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     const dotHtml = `<span class="status-dot status-dot--${status}" style="position:absolute; bottom:-2px; right:-2px; margin:0; width:10px; height:10px;"></span>`;
     
-    // Desktop
+    // Desktop & Mobile use the same header in our updated design
     headerAvatar.innerHTML = `<div style="position:relative; width:100%; height:100%; border-radius:50%;">${avatarHtml}${dotHtml}</div>`;
     headerName.textContent = targetUser.username;
     headerStatus.innerHTML = statusText;
-    
-    // Mobile
-    mobHeaderAvatar.innerHTML = `<div style="position:relative; width:100%; height:100%; border-radius:50%;">${avatarHtml}${dotHtml}</div>`;
-    mobHeaderName.textContent = targetUser.username;
-    mobHeaderStatus.innerHTML = statusText;
   }
 
   // ── Render reactions bar ──────────────────────────────────────────────────
@@ -500,6 +493,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   messageInput.addEventListener('input', () => {
     updateSendButton();
+    const len = messageInput.value.length;
+    if (charCounter) charCounter.textContent = `${len} / 500`;
     messageInput.style.height = 'auto';
     messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
 
@@ -534,6 +529,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     messageInput.value = '';
     messageInput.style.height = 'auto';
+    if (charCounter) charCounter.textContent = '0 / 500';
     updateSendButton();
     clearReply();
     clearTimeout(typingTimeout);
