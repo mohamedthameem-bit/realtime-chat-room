@@ -570,8 +570,6 @@
       registerVoiceSockets(socket);
     }
 
-    });
-
     socket.on('kicked-from-room', ({ message: msg }) => {
       alert(msg || 'You were kicked from this room by the host.');
       window.location.href = '/rooms.html';
