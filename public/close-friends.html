@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Close Friends — ChatRoom</title>
+    <meta name="description" content="Manage your Close Friends list." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body class="app-layout">
+    
+    <!-- Navigation Sidebar -->
+    <nav id="app-sidebar" class="app-sidebar" aria-label="Main Navigation"></nav>
+
+    <main class="app-main">
+      <header class="app-header">
+        <h1>Close Friends</h1>
+      </header>
+
+      <div class="content-container" style="max-width: 600px; margin: 0 auto; padding: 2rem;">
+        <p class="text-secondary" style="margin-bottom: 2rem; text-align: center;">
+          Stories and notes shared with Close Friends are only visible to the people on this list.
+        </p>
+
+        <div class="input-group" style="margin-bottom: 2rem;">
+          <input type="text" id="search-input" class="form-input" placeholder="Search followers..." aria-label="Search followers" />
+        </div>
+
+        <div id="close-friends-list" class="user-list" aria-live="polite">
+          <!-- Populated by JS -->
+        </div>
+        
+        <div style="text-align: center; margin-top: 2rem;">
+          <button id="save-btn" class="btn btn-primary" style="width: 100%;" disabled>Save Changes</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toast-container"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/close-friends.js"></script>
+  </body>
+</html>
