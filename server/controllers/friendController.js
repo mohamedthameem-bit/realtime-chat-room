@@ -51,7 +51,7 @@ async function sendRequest(req, res, next) {
     if (io) {
       // Find socket for targetUser
       // This requires global tracking which we will add in handlers.js
-      io.to(`user:${targetUserId}`).emit('friend-request-received', {
+      io.to(targetUserId.toString()).emit('friend-request-received', {
         from: {
           username: req.user.username,
           profilePic: req.user.profilePic,

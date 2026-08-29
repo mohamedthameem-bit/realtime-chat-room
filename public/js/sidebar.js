@@ -31,6 +31,7 @@
     dms:     I('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'),
     search:  I('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
     friends: I('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+    notifs:  I('<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>'),
   };
 
   const LOGO_SVG = `<svg class="snav-logo-svg" width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true">
@@ -50,7 +51,7 @@
     { id: 'friends', label: 'Friends',   href: '/friends.html',     icon: ICONS.friends },
     { id: 'rooms',   label: 'Rooms',     href: '/rooms.html',       icon: ICONS.rooms   },
     { id: 'create',  label: 'Create',    href: '/create-post.html', icon: ICONS.create  },
-    { id: 'notifs',  label: 'Activity',  href: '/notifications.html', icon: ICONS.home }, 
+    { id: 'notifs',  label: 'Notifications', href: '/notifications.html', icon: ICONS.notifs }, 
     { id: 'profile', label: 'Profile',   href: '/profile.html',     icon: ICONS.profile },
   ];
 
@@ -95,15 +96,18 @@
 
     const navHTML = NAV_ITEMS.map(({ id, label, href, icon }) => {
       const isActive = activeId === id;
-      const badgeId = id === 'friends' ? 'id="nav-friends-badge"' : '';
+      let badgeHTML = '';
+      if (id === 'friends') badgeHTML = `<span id="nav-friends-badge" class="nav-badge" style="display:none;">0</span>`;
+      if (id === 'notifs') badgeHTML = `<span id="nav-notifs-badge" class="nav-badge" style="display:none;">0</span>`;
+
       return `<li class="snav-item">
         <a href="${href}"
-           class="snav-link${isActive ? ' snav-link--active' : ''}"
+           class="snav-link${isActive ? ' snav-link--active active' : ''}"
            data-nav-id="${id}"
            ${isActive ? 'aria-current="page"' : ''}>
            <span class="snav-icon">${icon}</span>
            <span class="snav-label">${label}</span>
-           ${id === 'friends' ? `<span ${badgeId} class="nav-badge" style="display:none;">0</span>` : ''}
+           ${badgeHTML}
         </a>
       </li>`;
     }).join('');
@@ -335,6 +339,58 @@
     } catch (err) {}
   }
 
+  // ── Fetch Notifications Badge ───────────────────────────────────────────────
+  async function updateNotifsBadge() {
+    const badge = document.getElementById('nav-notifs-badge');
+    if (!badge) return;
+    try {
+      let count = 0;
+      try {
+        const res = await API.get('/api/notifications/unread-count');
+        count = res.count || 0;
+      } catch (e) {
+        // Fallback
+        const res2 = await API.get('/api/notifications');
+        if (res2.notifications) {
+          count = res2.notifications.filter(n => !n.isRead).length;
+        }
+      }
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (err) {}
+  }
+
+  // ── Socket.IO Real-time Notifications ───────────────────────────────────────
+  function initRealtime() {
+    // If socket.io isn't loaded on this page, dynamically load it
+    if (typeof io === 'undefined') {
+      const script = document.createElement('script');
+      script.src = '/socket.io/socket.io.js';
+      script.onload = () => setupGlobalSocket();
+      document.head.appendChild(script);
+    } else {
+      setupGlobalSocket();
+    }
+  }
+
+  function setupGlobalSocket() {
+    // We only need a single socket connection per page. If window.globalSocket exists, use it.
+    if (!window.globalSocket) {
+      window.globalSocket = io({ reconnection: true });
+    }
+    
+    window.globalSocket.on('new_notification', () => updateNotifsBadge());
+    window.globalSocket.on('new-notification', () => updateNotifsBadge());
+
+    window.globalSocket.on('friend-request-received', () => {
+      updateFriendBadge();
+    });
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
     if (typeof API === 'undefined') {
@@ -351,9 +407,14 @@
     initLogout();
     initStatusPicker();
     updateFriendBadge();
+    updateNotifsBadge();
+    initRealtime();
 
     // Re-check badge every 30 seconds
-    setInterval(updateFriendBadge, 30000);
+    setInterval(() => {
+      updateFriendBadge();
+      updateNotifsBadge();
+    }, 30000);
   }
 
   init();

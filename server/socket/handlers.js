@@ -44,13 +44,16 @@ async function removeFromRoom(io, socket) {
   io.to(roomId).emit('online-users', { roomId, users: onlineUsers });
 }
 
+const { setIo } = require('../socket');
+
 function registerHandlers(io, socket) {
+  setIo(io);
   const { username, _id: userId, profilePic } = socket.user;
   const userIdStr = userId.toString();
 
   // Phase 6: Global user tracking
   // Join a personal room to receive DMs and friend requests
-  socket.join(`user:${userIdStr}`);
+  socket.join(userIdStr);
 
   // Broadcast that this user is online (only if they are not set to invisible)
   if (socket.user.status !== 'invisible') {
@@ -163,7 +166,7 @@ function registerHandlers(io, socket) {
 
       // Also emit to user's personal rooms to update unread badges
       conv.participants.forEach(p => {
-        io.to(`user:${p.toString()}`).emit('dm-notification', payload);
+        io.to(p.toString()).emit('dm-notification', payload);
       });
     } catch (err) {}
   });
@@ -224,19 +227,19 @@ function registerHandlers(io, socket) {
 
   // 1-on-1 DM Calling
   socket.on('dm-call-offer', ({ targetUserId, offer }) => {
-    io.to(`user:${targetUserId}`).emit('dm-call-incoming', { callerId: userIdStr, callerName: username, offer });
+    io.to(targetUserId.toString()).emit('dm-call-incoming', { callerId: userIdStr, callerName: username, offer });
   });
   socket.on('dm-call-answer', ({ targetUserId, answer }) => {
-    io.to(`user:${targetUserId}`).emit('dm-call-answered', { answer });
+    io.to(targetUserId.toString()).emit('dm-call-answered', { answer });
   });
   socket.on('dm-call-ice-candidate', ({ targetUserId, candidate }) => {
-    io.to(`user:${targetUserId}`).emit('dm-call-ice-candidate', { candidate });
+    io.to(targetUserId.toString()).emit('dm-call-ice-candidate', { candidate });
   });
   socket.on('dm-call-rejected', ({ targetUserId }) => {
-    io.to(`user:${targetUserId}`).emit('dm-call-rejected');
+    io.to(targetUserId.toString()).emit('dm-call-rejected');
   });
   socket.on('dm-call-ended', ({ targetUserId }) => {
-    io.to(`user:${targetUserId}`).emit('dm-call-ended');
+    io.to(targetUserId.toString()).emit('dm-call-ended');
   });
 
   // Group Room Voice Mesh Networking
@@ -251,13 +254,13 @@ function registerHandlers(io, socket) {
     socket.to(socket.currentRoomId).emit('user-left-voice', { userId: userIdStr });
   });
   socket.on('room-voice-offer', ({ targetUserId, offer }) => {
-    io.to(`user:${targetUserId}`).emit('room-voice-offer', { callerId: userIdStr, callerName: username, offer });
+    io.to(targetUserId.toString()).emit('room-voice-offer', { callerId: userIdStr, callerName: username, offer });
   });
   socket.on('room-voice-answer', ({ targetUserId, answer }) => {
-    io.to(`user:${targetUserId}`).emit('room-voice-answer', { answererId: userIdStr, answer });
+    io.to(targetUserId.toString()).emit('room-voice-answer', { answererId: userIdStr, answer });
   });
   socket.on('room-voice-ice-candidate', ({ targetUserId, candidate }) => {
-    io.to(`user:${targetUserId}`).emit('room-voice-ice-candidate', { senderId: userIdStr, candidate });
+    io.to(targetUserId.toString()).emit('room-voice-ice-candidate', { senderId: userIdStr, candidate });
   });
 
   socket.on('typing', () => {

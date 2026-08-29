@@ -160,7 +160,7 @@ async function createNotification({ recipient, sender, type, targetType, targetI
         .populate('sender', 'username name profilePic isVerified')
         .lean();
 
-      io.to(`user:${recipient}`).emit('new-notification', populated);
+      io.to(recipient.toString()).emit('new-notification', populated);
     }
 
     return notification;

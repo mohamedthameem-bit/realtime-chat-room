@@ -49,7 +49,7 @@ async function followUser(req, res, next) {
       });
 
       if (io) {
-        io.to(`user:${targetUserId}`).emit('follow-request', {
+        io.to(targetUserId.toString()).emit('follow-request', {
           from: {
             _id: userId,
             username: req.user.username,
@@ -81,7 +81,7 @@ async function followUser(req, res, next) {
     });
 
     if (io) {
-      io.to(`user:${targetUserId}`).emit('follow-accepted', {
+      io.to(targetUserId.toString()).emit('follow-accepted', {
         from: {
           _id: userId,
           username: req.user.username,
@@ -156,7 +156,7 @@ async function acceptFollowRequest(req, res, next) {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${requesterId}`).emit('follow-accepted', {
+      io.to(requesterId.toString()).emit('follow-accepted', {
         from: {
           _id: userId,
           username: req.user.username,

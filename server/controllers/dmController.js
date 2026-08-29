@@ -128,8 +128,107 @@ async function getConversationMessages(req, res, next) {
   }
 }
 
+async function createGroupChat(req, res, next) {
+  try {
+    const userId = req.user._id;
+    const { participantIds, groupName, groupIcon } = req.body;
+
+    if (!participantIds || !Array.isArray(participantIds) || participantIds.length < 1) {
+      return res.status(400).json({ success: false, message: 'participantIds array is required.' });
+    }
+    if (!groupName) {
+      return res.status(400).json({ success: false, message: 'groupName is required.' });
+    }
+
+    const allParticipants = [...new Set([...participantIds, userId.toString()])];
+    
+    let conv = await Conversation.create({
+      participants: allParticipants,
+      isGroup: true,
+      groupName,
+      groupIcon: groupIcon || '',
+      admins: [userId]
+    });
+    conv = await Conversation.findById(conv._id).populate('participants', 'username profilePic status');
+    
+    res.json({ success: true, conversation: conv });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function togglePinConversation(req, res, next) {
+  try {
+    const userId = req.user._id;
+    const convId = req.params.id;
+    
+    const conv = await Conversation.findOne({ _id: convId, participants: userId });
+    if (!conv) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+    const isPinned = conv.pinnedBy.some(id => id.toString() === userId.toString());
+    if (isPinned) {
+      conv.pinnedBy = conv.pinnedBy.filter(id => id.toString() !== userId.toString());
+    } else {
+      conv.pinnedBy.push(userId);
+    }
+    await conv.save();
+    res.json({ success: true, isPinned: !isPinned });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleMuteConversation(req, res, next) {
+  try {
+    const userId = req.user._id;
+    const convId = req.params.id;
+    
+    const conv = await Conversation.findOne({ _id: convId, participants: userId });
+    if (!conv) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+    const isMuted = conv.mutedBy.some(id => id.toString() === userId.toString());
+    if (isMuted) {
+      conv.mutedBy = conv.mutedBy.filter(id => id.toString() !== userId.toString());
+    } else {
+      conv.mutedBy.push(userId);
+    }
+    await conv.save();
+    res.json({ success: true, isMuted: !isMuted });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleDisappearingMessages(req, res, next) {
+  try {
+    const userId = req.user._id;
+    const convId = req.params.id;
+
+    const conv = await Conversation.findOne({ _id: convId, participants: userId });
+    if (!conv) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+    if (conv.isGroup) {
+      const isAdmin = conv.admins.some(adminId => adminId.toString() === userId.toString());
+      if (!isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only admins can toggle disappearing messages in groups.' });
+      }
+    }
+
+    conv.disappearingMessages = !conv.disappearingMessages;
+    await conv.save();
+
+    res.json({ success: true, disappearingMessages: conv.disappearingMessages });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getConversations,
   startConversation,
   getConversationMessages,
+  createGroupChat,
+  togglePinConversation,
+  toggleMuteConversation,
+  toggleDisappearingMessages
 };

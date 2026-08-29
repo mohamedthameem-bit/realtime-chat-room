@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notifications — ChatRoom</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .notifications-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 1.5rem;
+      }
+      .notification-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        margin-bottom: 1rem;
+        transition: background 0.2s;
+        text-decoration: none;
+        color: inherit;
+      }
+      .notification-item:hover {
+        background: var(--bg);
+      }
+      .notification-item.unread {
+        border-left: 4px solid var(--primary);
+        background: rgba(108, 99, 255, 0.05);
+      }
+      .notification-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        object-fit: cover;
+        background-color: var(--primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1.2rem;
+      }
+      .notification-content {
+        flex: 1;
+      }
+      .notification-text {
+        margin-bottom: 0.25rem;
+        font-size: 0.95rem;
+      }
+      .notification-text strong {
+        color: var(--text);
+      }
+      .notification-time {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+      }
+      .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-secondary);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="notifications-container">
+      <header class="page-header" style="border-bottom: none; margin-bottom: 1rem;">
+        <h1 class="page-title">Notifications</h1>
+      </header>
+
+      <div id="notifications-list">
+        <!-- Notifications will be injected here -->
+        <div class="empty-state">Loading notifications...</div>
+      </div>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/notifications.js"></script>
+  </body>
+</html>
