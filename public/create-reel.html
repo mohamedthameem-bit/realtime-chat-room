@@ -1,36 +1,89 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Create Reel</title>
-  <style>
-    form { display: flex; flex-direction: column; gap: 1rem; }
-    textarea { min-height: 100px; resize: vertical; padding: 0.5rem; }
-    input[type="file"] { padding: 0.5rem; background: #f0f0f0; border-radius: 4px; }
-    button { padding: 0.5rem 1rem; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    button:hover { background-color: #0056b3; }
-  </style>
-</head>
-<body>
-  <main style="max-width: 600px; margin: 0 auto; padding: 1.5rem;">
-    <h2>Create a Reel</h2>
-    <form id="create-reel-form">
-      <div>
-        <label for="videoFile">Video File:</label>
-        <input type="file" id="videoFile" name="video" accept="video/*" required>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Reel — ChatRoom</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .create-container { max-width: 600px; margin: 0 auto; padding: 2rem 1rem; }
+      .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 3rem 1rem; text-align: center; cursor: pointer; transition: all 0.3s ease; margin-bottom: 1.5rem; }
+      .drop-zone:hover { border-color: var(--primary); background: var(--surface-hover); }
+      #preview-container { text-align: center; margin-bottom: 1.5rem; display: none; }
+      #preview-container video { max-width: 100%; max-height: 400px; border-radius: var(--radius-md); }
+    </style>
+  </head>
+  <body>
+    <main style="max-width: 600px; margin: 0 auto; padding: 1.5rem;">
+      <header class="page-header" style="justify-content: center; border-bottom: none;">
+        <h1 class="page-title">Create Reel</h1>
+      </header>
+
+      <div class="create-container">
+        <form id="create-reel-form">
+          <div id="drop-zone" class="drop-zone">
+            <p>Select Video (Up to 60s)</p>
+            <input type="file" id="videoFile" name="video" accept="video/mp4, video/quicktime, video/*" required style="display: none;" />
+          </div>
+
+          <div id="preview-container"></div>
+
+          <div class="input-group" style="margin-bottom: 1rem;">
+            <textarea id="caption" class="form-input" placeholder="Write a caption..."></textarea>
+          </div>
+
+          <button type="submit" id="submit-btn" class="btn btn-primary" style="width: 100%;">Upload Reel</button>
+        </form>
       </div>
-      <div>
-        <label for="caption">Caption:</label>
-        <textarea id="caption" name="caption" placeholder="Write a caption..."></textarea>
-      </div>
-      <button type="submit">Upload Reel</button>
-    </form>
-    <div id="message" style="margin-top: 1rem;"></div>
-  </main>
-  
-  <script src="/js/api.js"></script>
-  <script src="/js/sidebar.js"></script>
-  <script src="/js/create-reel.js"></script>
-</body>
+    </main>
+    <div id="toast-container"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script>
+      const form = document.getElementById('create-reel-form');
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('videoFile');
+      const previewContainer = document.getElementById('preview-container');
+      const submitBtn = document.getElementById('submit-btn');
+
+      dropZone.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          const fileUrl = URL.createObjectURL(e.target.files[0]);
+          previewContainer.innerHTML = \`<video src="\${fileUrl}" controls></video>\`;
+          previewContainer.style.display = 'block';
+        }
+      });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const file = fileInput.files[0];
+        if (!file) {
+          if(typeof showToast==='function') showToast('Select a video first.', 'error');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('video', file);
+        formData.append('caption', document.getElementById('caption').value.trim());
+
+        try {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Uploading...';
+          await API.postForm('/api/reels', formData);
+          if(typeof showToast==='function') showToast('Reel uploaded!', 'success');
+          setTimeout(() => { window.location.href = '/reels.html'; }, 1000);
+        } catch (err) {
+          if(typeof showToast==='function') showToast('Upload failed.', 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Upload Reel';
+        }
+      });
+    </script>
+  </body>
 </html>
