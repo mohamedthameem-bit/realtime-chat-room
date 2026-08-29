@@ -53,19 +53,19 @@ function createPostCard(post) {
   card.dataset.id = post._id;
 
   const author = post.author || {};
-  const avatarUrl = author.avatar || '/images/default-avatar.png';
+  const avatarUrl = author.profilePic || '';
   const username = author.username || 'unknown';
-  const location = post.location ? `<div class="post-location">${post.location}</div>` : '';
+  const location = post.location && post.location.name ? `<div class="post-location">${post.location.name}</div>` : '';
 
   // Handle Media (simple carousel logic if multiple, though just rendering one here for simplicity if not fully implemented)
   let mediaHtml = '';
-  if (post.media && post.media.length > 0) {
-    // Just showing the first media item for now, could be expanded into a carousel
-    const media = post.media[0];
-    if (media.type === 'video') {
-      mediaHtml = `<video src="${media.url}" controls class="post-media"></video>`;
+  if (post.mediaUrls && post.mediaUrls.length > 0) {
+    const url = post.mediaUrls[0];
+    const type = post.mediaTypes && post.mediaTypes.length > 0 ? post.mediaTypes[0] : 'image';
+    if (type === 'video') {
+      mediaHtml = `<video src="${url}" controls class="post-media"></video>`;
     } else {
-      mediaHtml = `<img src="${media.url}" alt="Post media" class="post-media">`;
+      mediaHtml = `<img src="${url}" alt="Post media" class="post-media">`;
     }
   }
 

@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const post = await API.get(`/api/posts/${postId}`);
       renderPost(post);
+      document.getElementById('comments-section').style.display = 'block';
     } catch (error) {
       console.error('Error loading post:', error);
       postContainer.innerHTML = '<p>Post not found or deleted.</p>';
@@ -48,22 +49,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isAuthor = currentUser && post.author && (currentUser._id === post.author._id || currentUser._id === post.author);
     
     let mediaHtml = '';
-    if (post.mediaUrl) {
-      if (post.mediaType === 'video') {
-        mediaHtml = `<video src="${post.mediaUrl}" controls class="post-media"></video>`;
+    if (post.mediaUrls && post.mediaUrls.length > 0) {
+      const url = post.mediaUrls[0];
+      const type = post.mediaTypes && post.mediaTypes.length > 0 ? post.mediaTypes[0] : 'image';
+      if (type === 'video') {
+        mediaHtml = `<video src="${url}" controls class="post-media"></video>`;
       } else {
-        mediaHtml = `<img src="${post.mediaUrl}" alt="Post media" class="post-media">`;
+        mediaHtml = `<img src="${url}" alt="Post media" class="post-media">`;
       }
     }
     
-    const authorName = post.author && post.author.username ? post.author.username : 'Unknown User';
+    const author = post.author || {};
+    const avatarUrl = author.profilePic || '';
+    const username = author.username || 'unknown';
+    const location = post.location && post.location.name ? `<div class="post-location">${post.location.name}</div>` : '';
     
     postContainer.innerHTML = `
       <div class="post card">
         <div class="post-header">
           <div class="post-author-info">
-            <span class="author-name">${authorName}</span>
+            ${avatarUrl ? `<img src="${avatarUrl}" class="avatar-small">` : ''}
+            <span class="author-name">${username}</span>
           </div>
+          ${location}
           ${isAuthor ? `<button class="btn btn-danger btn-sm" id="delete-post-btn">Delete Post</button>` : ''}
         </div>
         ${mediaHtml}

@@ -285,21 +285,22 @@ const toggleSave = async (req, res) => {
     await post.save();
 
     // Find or create default "All Posts" collection for user
-    let defaultCollection = await SavedCollection.findOne({ user: userId, name: 'All Posts' });
+    let defaultCollection = await SavedCollection.findOne({ owner: userId, name: 'All Posts' });
     if (!defaultCollection) {
       defaultCollection = new SavedCollection({
-        user: userId,
+        owner: userId,
         name: 'All Posts',
-        posts: []
+        items: []
       });
     }
 
     if (isSaved) {
-      if (!defaultCollection.posts.includes(postId)) {
-        defaultCollection.posts.push(postId);
+      const exists = defaultCollection.items.find(i => i.targetId.toString() === postId.toString());
+      if (!exists) {
+        defaultCollection.items.push({ targetType: 'post', targetId: postId });
       }
     } else {
-      defaultCollection.posts = defaultCollection.posts.filter(id => id.toString() !== postId.toString());
+      defaultCollection.items = defaultCollection.items.filter(i => i.targetId.toString() !== postId.toString());
     }
     
     await defaultCollection.save();
