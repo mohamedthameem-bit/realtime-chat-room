@@ -128,9 +128,30 @@ const deleteReel = async (req, res) => {
   }
 };
 
+// Get user's reels
+const getUserReels = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 12;
+    const skip = (page - 1) * limit;
+
+    const reels = await Reel.find({ author: userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({ reels, page });
+  } catch (error) {
+    console.error('Error getting user reels:', error);
+    res.status(500).json({ error: 'Server error getting user reels' });
+  }
+};
+
 module.exports = {
   createReel,
   getFeedReels,
   likeReel,
-  deleteReel
+  deleteReel,
+  getUserReels
 };

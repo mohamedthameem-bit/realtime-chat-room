@@ -18,7 +18,9 @@ const upload = multer({ storage });
 
 router.post('/', requireAuth, upload.single('video'), ctrl.createReel);
 router.get('/feed', requireAuth, ctrl.getFeedReels);
+router.get('/user/:userId', requireAuth, ctrl.getUserReels);
 router.post('/:id/like', requireAuth, ctrl.likeReel);
 router.delete('/:id', requireAuth, ctrl.deleteReel);
 
 module.exports = router;
+

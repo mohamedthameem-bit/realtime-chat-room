@@ -14,7 +14,7 @@ const upload = multer({ storage });
 
 router.post('/', requireAuth, upload.array('media', 10), ctrl.createPost);
 router.get('/feed', requireAuth, ctrl.getFeed);
-router.get('/archived', requireAuth, ctrl.getArchived);
+router.get('/archived', requireAuth, ctrl.getArchivedPosts);
 router.get('/user/:userId', requireAuth, ctrl.getUserPosts);
 router.get('/:id', requireAuth, ctrl.getPost);
 router.patch('/:id', requireAuth, ctrl.editPost);

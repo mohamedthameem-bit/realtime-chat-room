@@ -361,8 +361,8 @@ const getUserPosts = async (req, res) => {
   }
 };
 
-// 10. getArchived
-const getArchived = async (req, res) => {
+// 10. getArchivedPosts
+const getArchivedPosts = async (req, res) => {
   try {
     const userId = req.user._id;
     const page = parseInt(req.query.page, 10) || 1;
@@ -419,6 +419,6 @@ module.exports = {
   toggleSave,
   incrementShare,
   getUserPosts,
-  getArchived,
+  getArchivedPosts,
   toggleArchive
 };
