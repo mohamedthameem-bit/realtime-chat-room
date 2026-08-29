@@ -27,6 +27,8 @@ router.use('/comments', require('./comments'));
 router.use('/stories', require('./stories'));
 router.use('/highlights', require('./highlights'));
 router.use('/notes', require('./notes'));
+router.use('/reels', require('./reels'));
+router.use('/explore', require('./explore'));
 
 // GET /api/health — public, no auth required
 router.get('/health', healthCheck);
