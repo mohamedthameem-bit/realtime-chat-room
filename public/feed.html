@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feed</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+      <nav>
+        <ul>
+          <li><a href="/feed.html">Home</a></li>
+          <li><a href="/search.html">Search</a></li>
+          <li><a href="/explore.html">Explore</a></li>
+          <li><a href="/profile.html">Profile</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main class="app-main">
+      <header>
+        <h1>Feed</h1>
+      </header>
+
+      <!-- Story Tray Container -->
+      <div class="story-tray-container" style="display: flex; overflow-x: auto; gap: 10px; padding: 10px 0;">
+        <!-- Empty for now -->
+      </div>
+
+      <!-- Feed Container -->
+      <div id="feed-container"></div>
+
+      <!-- Load More Button -->
+      <button id="load-more-btn" style="display: none; margin: 20px auto;">Load More</button>
+
+      <!-- Toast Container -->
+      <div id="toast-container" class="toast-container"></div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/feed.js"></script>
+</body>
+</html>

@@ -22,6 +22,8 @@ router.use('/users', require('./users'));
 router.use('/friends', require('./friends'));
 router.use('/follow', require('./follow'));
 router.use('/notifications', require('./notifications'));
+router.use('/posts', require('./posts'));
+router.use('/comments', require('./comments'));
 
 // GET /api/health — public, no auth required
 router.get('/health', healthCheck);

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post - Realtime Chat Room</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>App</h2>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/feed.html"><i class="fas fa-home"></i> Feed</a>
+        <a href="/profile.html"><i class="fas fa-user"></i> Profile</a>
+        <a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      </nav>
+    </aside>
+    
+    <main class="app-main">
+      <header class="main-header">
+        <h1>Post</h1>
+      </header>
+      
+      <div class="content-container">
+        <div id="post-container" class="post-detail">
+          <!-- Post will be rendered here -->
+        </div>
+        
+        <div id="comments-section" class="comments-section">
+          <h3>Comments</h3>
+          <div class="comment-input-area">
+            <input type="text" id="comment-input" placeholder="Add a comment..." />
+            <button id="submit-comment" class="btn btn-primary">Post</button>
+          </div>
+          <div id="comments-list" class="comments-list">
+            <!-- Comments will be rendered here -->
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <div id="toast-container"></div>
+  
+  <script src="/js/api.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/post.js"></script>
+</body>
+</html>

@@ -43,12 +43,14 @@
 
   // ── Nav item definitions ────────────────────────────────────────────────────
   const NAV_ITEMS = [
-    { id: 'home',    label: 'Home',      href: '/home.html',        icon: ICONS.home    },
+    { id: 'home',    label: 'Feed',      href: '/feed.html',        icon: ICONS.home    },
+    { id: 'explore', label: 'Explore',   href: '/explore.html',     icon: ICONS.search  },
+    { id: 'reels',   label: 'Reels',     href: '/reels.html',       icon: ICONS.home    },
     { id: 'dms',     label: 'DMs',       href: '/dms.html',         icon: ICONS.dms     },
     { id: 'friends', label: 'Friends',   href: '/friends.html',     icon: ICONS.friends },
-    { id: 'search',  label: 'Search',    href: '/search.html',      icon: ICONS.search  },
-    { id: 'rooms',   label: 'All Rooms', href: '/rooms.html',       icon: ICONS.rooms   },
-    { id: 'create',  label: 'Create',    href: '/create-room.html', icon: ICONS.create  },
+    { id: 'rooms',   label: 'Rooms',     href: '/rooms.html',       icon: ICONS.rooms   },
+    { id: 'create',  label: 'Create',    href: '/create-post.html', icon: ICONS.create  },
+    { id: 'notifs',  label: 'Activity',  href: '/notifications.html', icon: ICONS.home }, 
     { id: 'profile', label: 'Profile',   href: '/profile.html',     icon: ICONS.profile },
   ];
 
@@ -69,14 +71,15 @@
   // ── Determine which nav item is active ──────────────────────────────────────
   function getActiveId() {
     const p = window.location.pathname;
-    if (p === '/' || p === '/home.html')        return 'home';
-    if (p === '/create-room.html')              return 'create';
-    if (p === '/profile.html')                  return 'profile';
-    if (p === '/rooms.html')                    return 'rooms';
-    if (p === '/dms.html' || p === '/dm.html')  return 'dms';
-    if (p === '/friends.html')                  return 'friends';
-    if (p === '/search.html' || p === '/user-profile.html') return 'search';
-    // /chat.html — no active highlight (user is inside a room)
+    if (p === '/' || p === '/feed.html' || p === '/home.html') return 'home';
+    if (p === '/explore.html' || p === '/search.html') return 'explore';
+    if (p === '/reels.html' || p.startsWith('/reel.html')) return 'reels';
+    if (p === '/create-post.html' || p === '/create-room.html') return 'create';
+    if (p === '/profile.html' || p === '/edit-profile.html') return 'profile';
+    if (p === '/rooms.html') return 'rooms';
+    if (p === '/dms.html' || p === '/dm.html') return 'dms';
+    if (p === '/friends.html' || p === '/close-friends.html') return 'friends';
+    if (p === '/notifications.html') return 'notifs';
     return null;
   }
 
