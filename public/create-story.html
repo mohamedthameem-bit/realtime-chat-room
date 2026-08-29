@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Story — ChatRoom</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      .create-container { max-width: 600px; margin: 0 auto; padding: 2rem 1rem; }
+      .drop-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 3rem 1rem; text-align: center; cursor: pointer; transition: all 0.3s ease; margin-bottom: 1.5rem; }
+      .drop-zone:hover { border-color: var(--primary); background: var(--surface-hover); }
+      #preview-container { text-align: center; margin-bottom: 1.5rem; display: none; }
+      #preview-container img, #preview-container video { max-width: 100%; max-height: 400px; border-radius: var(--radius-md); }
+    </style>
+  </head>
+  <body>
+    <main style="max-width: 600px; margin: 0 auto; padding: 1.5rem;">
+      <header class="page-header" style="justify-content: center; border-bottom: none;">
+        <h1 class="page-title">Create Story</h1>
+      </header>
+
+      <div class="create-container">
+        <form id="create-story-form">
+          <div id="drop-zone" class="drop-zone">
+            <p>Select Photo or Video</p>
+            <input type="file" id="media-input" accept="image/jpeg, image/png, image/webp, video/mp4" style="display: none;" />
+          </div>
+
+          <div id="preview-container"></div>
+
+          <div class="input-group" style="margin-bottom: 1rem;">
+            <input type="text" id="caption" class="form-input" placeholder="Add text overlay / caption..." maxlength="200" />
+          </div>
+
+          <div class="input-group" style="margin-bottom: 2rem;">
+            <label class="form-label">Audience</label>
+            <select id="audience" class="form-input">
+              <option value="followers">Followers</option>
+              <option value="public">Public</option>
+              <option value="close-friends">Close Friends</option>
+            </select>
+          </div>
+
+          <button type="submit" id="submit-btn" class="btn btn-primary" style="width: 100%;">Post Story</button>
+        </form>
+      </div>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/create-story.js"></script>
+  </body>
+</html>

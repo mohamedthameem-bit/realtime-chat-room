@@ -2,6 +2,7 @@ let page = 1;
 
 document.addEventListener('DOMContentLoaded', () => {
   fetchFeed();
+  fetchStories();
 
   const loadMoreBtn = document.getElementById('load-more-btn');
   if (loadMoreBtn) {
@@ -11,6 +12,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+function fetchStories() {
+  API.get('/api/stories/feed').then(storyGroups => {
+    const tray = document.getElementById('story-tray');
+    if (!tray) return;
+    let html = `
+      <div class="story-item" onclick="window.location.href='/create-story.html'" style="cursor:pointer;">
+        <div class="story-ring" style="background:var(--border);">
+          <div style="width:100%;height:100%;border-radius:50%;background:var(--bg-surface);display:flex;align-items:center;justify-content:center;font-size:24px;border:2px solid var(--bg-surface);">+</div>
+        </div>
+        <span style="font-size:0.75rem;">Your Story</span>
+      </div>
+    `;
+    if (storyGroups && storyGroups.length > 0) {
+      storyGroups.forEach(group => {
+        const author = group.author || {};
+        const pic = author.profilePic || '';
+        html += `
+          <div class="story-item" onclick="window.location.href='/story.html?userId=${author._id}'" style="cursor:pointer;">
+            <div class="story-ring">
+              ${pic ? `<img src="${pic}">` : `<div style="width:100%;height:100%;border-radius:50%;background:#555;border:2px solid var(--bg-surface);"></div>`}
+            </div>
+            <span style="font-size:0.75rem;">${author.username || 'unknown'}</span>
+          </div>
+        `;
+      });
+    }
+    tray.innerHTML = html;
+  }).catch(err => console.error('Failed to load stories for tray', err));
+}
 
 async function fetchFeed() {
   try {

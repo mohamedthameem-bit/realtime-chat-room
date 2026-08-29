@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Story — ChatRoom</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <style>
+      body { background: #000; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+      .story-viewer { position: relative; width: 100%; max-width: 450px; height: 100vh; max-height: 800px; display: flex; flex-direction: column; background: #111; }
+      .progress-container { display: flex; gap: 4px; padding: 10px; position: absolute; top: 0; left: 0; right: 0; z-index: 10; }
+      .progress-bar { flex: 1; height: 3px; background: rgba(255,255,255,0.3); border-radius: 2px; }
+      .progress-bar-fill { height: 100%; background: #fff; width: 0%; border-radius: 2px; }
+      .story-header { position: absolute; top: 20px; left: 10px; right: 10px; display: flex; align-items: center; z-index: 10; color: #fff; }
+      .story-avatar { width: 32px; height: 32px; border-radius: 50%; margin-right: 10px; object-fit: cover; }
+      .story-username { font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+      .story-time { font-size: 0.8rem; opacity: 0.8; margin-left: 10px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+      .story-close { margin-left: auto; background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
+      .story-media-container { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
+      .story-media { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .story-caption { position: absolute; bottom: 80px; text-align: center; width: 100%; color: #fff; font-size: 1.2rem; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); padding: 0 20px; }
+      .story-controls { position: absolute; top: 0; bottom: 0; left: 0; right: 0; display: flex; z-index: 5; }
+      .control-left, .control-right { flex: 1; cursor: pointer; }
+      .story-footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 15px; display: flex; gap: 10px; z-index: 10; background: linear-gradient(transparent, rgba(0,0,0,0.8)); }
+      .reply-input { flex: 1; background: transparent; border: 1px solid rgba(255,255,255,0.5); border-radius: 24px; padding: 10px 15px; color: #fff; outline: none; }
+      .reply-input::placeholder { color: rgba(255,255,255,0.7); }
+      .react-btn { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div class="story-viewer" id="story-viewer">
+      <!-- Injected by JS -->
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/story.js"></script>
+  </body>
+</html>

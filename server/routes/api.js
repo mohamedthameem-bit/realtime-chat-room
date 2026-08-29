@@ -24,6 +24,9 @@ router.use('/follow', require('./follow'));
 router.use('/notifications', require('./notifications'));
 router.use('/posts', require('./posts'));
 router.use('/comments', require('./comments'));
+router.use('/stories', require('./stories'));
+router.use('/highlights', require('./highlights'));
+router.use('/notes', require('./notes'));
 
 // GET /api/health — public, no auth required
 router.get('/health', healthCheck);
